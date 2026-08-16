@@ -26,7 +26,7 @@ LANGUAGES = {
     "c": Language(
         name="C",
         src_filename=lambda stem: f"{stem}.c",
-        build=lambda src, bin_dir, stem: ["gcc", "-O2", "-o", str(bin_dir / stem), str(src)],
+        build=lambda src, bin_dir, stem: ["gcc", "-O2", "-o", str(bin_dir / stem), str(src), "-lm"],
         run=lambda src, bin_dir, stem, args: [str(bin_dir / stem), *args],
     ),
     "rust": Language(
@@ -62,4 +62,7 @@ BENCHMARKS = {
     "fib": {"folder": "fibonacci", "stem": "fib", "default_size": 32},
     "sort": {"folder": "sort", "stem": "sort", "default_size": 2_000_000},
     "matmul": {"folder": "matmul", "stem": "matmul", "default_size": 400},
+    "mandelbrot": {"folder": "mandelbrot", "stem": "mandelbrot", "default_size": 800},
+    "nbody": {"folder": "nbody", "stem": "nbody", "default_size": 300},
+    "wordcount": {"folder": "wordcount", "stem": "wordcount", "default_size": 2_000_000},
 }
