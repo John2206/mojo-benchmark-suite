@@ -37,22 +37,23 @@ def latest_results_file() -> Path:
     return files[-1]
 
 
-def render_chart(entry: dict) -> str:
-    rows = sorted(entry["results"], key=lambda r: r["min"])
+def render_chart(entry: dict, metric: str, fmt: str, unit: str) -> str:
+    rows = sorted((r for r in entry["results"] if r.get(metric) is not None), key=lambda r: r[metric])
     if not rows:
-        return "<p><em>no results</em></p>"
-    max_time = max(r["min"] for r in rows)
+        return "<p><em>no data</em></p>"
+    max_value = max(r[metric] for r in rows)
     height = len(rows) * (BAR_HEIGHT + BAR_GAP)
 
     bars = []
     for i, row in enumerate(rows):
         y = i * (BAR_HEIGHT + BAR_GAP)
-        width = max(row["min"] / max_time * CHART_WIDTH, 2)
+        width = max(row[metric] / max_value * CHART_WIDTH, 2) if max_value else 2
         color = COLORS.get(row["language"], DEFAULT_COLOR)
+        label = f"{format(row[metric], fmt)}{unit}"
         bars.append(
             f'<rect x="120" y="{y}" width="{width:.1f}" height="{BAR_HEIGHT}" fill="{color}" />'
             f'<text x="110" y="{y + BAR_HEIGHT / 2 + 5}" text-anchor="end" font-size="13">{row["language"]}</text>'
-            f'<text x="{120 + width + 6:.1f}" y="{y + BAR_HEIGHT / 2 + 5}" font-size="12" fill="#555">{row["min"]:.4f}s</text>'
+            f'<text x="{120 + width + 6:.1f}" y="{y + BAR_HEIGHT / 2 + 5}" font-size="12" fill="#555">{label}</text>'
         )
 
     return f'<svg width="{120 + CHART_WIDTH + 80}" height="{height}">{"".join(bars)}</svg>'
@@ -63,7 +64,8 @@ def render_html(data: list[dict]) -> str:
     for entry in data:
         sections.append(
             f'<h2>{entry["benchmark"]} <small>(size={entry["size"]})</small></h2>\n'
-            f'{render_chart(entry)}'
+            f'<h3>time</h3>\n{render_chart(entry, "min", ".4f", "s")}\n'
+            f'<h3>peak RSS</h3>\n{render_chart(entry, "peak_rss_mb", ".1f", "MB")}'
         )
     body = "\n".join(sections)
     return f"""<!DOCTYPE html>
@@ -91,12 +93,12 @@ def main() -> None:
     parser.add_argument("-o", "--output", default="report.html")
     args = parser.parse_args()
 
-    path = Path(args.results_file) if args.results_file else latest_results_file()
+    path = Path(args.results_file).resolve() if args.results_file else latest_results_file()
     data = json.loads(path.read_text())
 
     out_path = ROOT / args.output
     out_path.write_text(render_html(data))
-    print(f"Wrote {out_path.relative_to(ROOT)} from {path.relative_to(ROOT)}")
+    print(f"Wrote {out_path.resolve()} from {path}")
 
 
 if __name__ == "__main__":

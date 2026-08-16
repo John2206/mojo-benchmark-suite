@@ -34,7 +34,8 @@ def main() -> None:
         print("No results/*.json files yet — run with --json first.")
         return
 
-    # points[benchmark][language] = [(timestamp, size, min_time), ...]
+    # points[benchmark][language] = [(timestamp, size, min_time, peak_rss_mb), ...]
+    # peak_rss_mb is None for runs recorded before memory tracking was added.
     points = defaultdict(lambda: defaultdict(list))
     for timestamp, data in runs:
         for entry in data:
@@ -42,21 +43,27 @@ def main() -> None:
             if args.benchmark and bench_key != args.benchmark:
                 continue
             for row in entry["results"]:
-                points[bench_key][row["language"]].append((timestamp, entry["size"], row["min"]))
+                points[bench_key][row["language"]].append(
+                    (timestamp, entry["size"], row["min"], row.get("peak_rss_mb"))
+                )
 
     for bench_key in sorted(points):
         print(f"\n=== {bench_key} ===")
         for language in sorted(points[bench_key]):
             print(f"  {language}:")
             history = points[bench_key][language]
-            prev_size = prev_time = None
-            for timestamp, size, min_time in history:
-                delta = ""
+            prev_size = prev_time = prev_rss = None
+            for timestamp, size, min_time, peak_rss_mb in history:
+                time_delta = rss_delta = ""
                 if prev_size == size and prev_time:
                     pct = (min_time - prev_time) / prev_time * 100
-                    delta = f"  ({pct:+.1f}%)"
-                print(f"    {timestamp}  size={size:<10} {min_time:.4f}s{delta}")
-                prev_size, prev_time = size, min_time
+                    time_delta = f" ({pct:+.1f}%)"
+                if prev_size == size and prev_rss and peak_rss_mb is not None:
+                    pct = (peak_rss_mb - prev_rss) / prev_rss * 100
+                    rss_delta = f" ({pct:+.1f}%)"
+                rss_str = f"{peak_rss_mb:.1f}MB{rss_delta}" if peak_rss_mb is not None else "n/a"
+                print(f"    {timestamp}  size={size:<10} time={min_time:.4f}s{time_delta}  RSS={rss_str}")
+                prev_size, prev_time, prev_rss = size, min_time, peak_rss_mb
 
 
 if __name__ == "__main__":
