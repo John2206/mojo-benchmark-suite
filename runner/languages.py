@@ -69,4 +69,7 @@ BENCHMARKS = {
     "primes_parallel": {"folder": "primes_parallel", "stem": "primes_parallel", "default_size": 2_000_000},
     "ipvalidate": {"folder": "ipvalidate", "stem": "ipvalidate", "default_size": 2_000_000},
     "allocchurn": {"folder": "allocchurn", "stem": "allocchurn", "default_size": 5_000_000},
+    "graph_bfs": {"folder": "graph_bfs", "stem": "graph_bfs", "default_size": 500_000},
+    "bst": {"folder": "bst", "stem": "bst", "default_size": 300_000},
+    "json_roundtrip": {"folder": "json_roundtrip", "stem": "json_roundtrip", "default_size": 200_000},
 }

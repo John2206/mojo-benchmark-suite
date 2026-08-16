@@ -37,26 +37,36 @@ def latest_results_file() -> Path:
     return files[-1]
 
 
-def render_chart(entry: dict, metric: str, fmt: str, unit: str) -> str:
+def render_chart(entry: dict, metric: str, fmt: str, unit: str, title: str = "") -> str:
     rows = sorted((r for r in entry["results"] if r.get(metric) is not None), key=lambda r: r[metric])
     if not rows:
         return "<p><em>no data</em></p>"
     max_value = max(r[metric] for r in rows)
-    height = len(rows) * (BAR_HEIGHT + BAR_GAP)
+    pad = 16
+    title_h = 24 if title else 0
+    chart_h = len(rows) * (BAR_HEIGHT + BAR_GAP)
+    width = 120 + CHART_WIDTH + 80
+    height = title_h + chart_h + pad * 2
 
     bars = []
+    if title:
+        bars.append(f'<text x="{pad}" y="{pad + 12}" font-size="14" font-weight="bold" fill="#222">{title}</text>')
     for i, row in enumerate(rows):
-        y = i * (BAR_HEIGHT + BAR_GAP)
-        width = max(row[metric] / max_value * CHART_WIDTH, 2) if max_value else 2
+        y = pad + title_h + i * (BAR_HEIGHT + BAR_GAP)
+        bar_width = max(row[metric] / max_value * CHART_WIDTH, 2) if max_value else 2
         color = COLORS.get(row["language"], DEFAULT_COLOR)
         label = f"{format(row[metric], fmt)}{unit}"
         bars.append(
-            f'<rect x="120" y="{y}" width="{width:.1f}" height="{BAR_HEIGHT}" fill="{color}" />'
-            f'<text x="110" y="{y + BAR_HEIGHT / 2 + 5}" text-anchor="end" font-size="13">{row["language"]}</text>'
-            f'<text x="{120 + width + 6:.1f}" y="{y + BAR_HEIGHT / 2 + 5}" font-size="12" fill="#555">{label}</text>'
+            f'<rect x="{pad + 120}" y="{y}" width="{bar_width:.1f}" height="{BAR_HEIGHT}" fill="{color}" />'
+            f'<text x="{pad + 110}" y="{y + BAR_HEIGHT / 2 + 5}" text-anchor="end" font-size="13">{row["language"]}</text>'
+            f'<text x="{pad + 120 + bar_width + 6:.1f}" y="{y + BAR_HEIGHT / 2 + 5}" font-size="12" fill="#555">{label}</text>'
         )
 
-    return f'<svg width="{120 + CHART_WIDTH + 80}" height="{height}">{"".join(bars)}</svg>'
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width + pad * 2}" height="{height}">'
+        f'<rect width="100%" height="100%" fill="white" stroke="#ddd" />'
+        f"{''.join(bars)}</svg>"
+    )
 
 
 def render_html(data: list[dict]) -> str:
@@ -87,14 +97,32 @@ small {{ color: #888; font-weight: normal; }}
 """
 
 
+def export_svgs(data: list[dict], export_dir: Path) -> None:
+    export_dir.mkdir(parents=True, exist_ok=True)
+    for entry in data:
+        bench = entry["benchmark"]
+        time_path = export_dir / f"{bench}-time.svg"
+        time_path.write_text(render_chart(entry, "min", ".4f", "s", title=f"{bench} — time (size={entry['size']})"))
+        print(f"Wrote {time_path}")
+
+        rss_path = export_dir / f"{bench}-rss.svg"
+        rss_path.write_text(render_chart(entry, "peak_rss_mb", ".1f", "MB", title=f"{bench} — peak RSS (size={entry['size']})"))
+        print(f"Wrote {rss_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("results_file", nargs="?", default=None)
     parser.add_argument("-o", "--output", default="report.html")
+    parser.add_argument("--export-dir", default=None, help="write standalone <benchmark>-time.svg / -rss.svg files here instead of an HTML report")
     args = parser.parse_args()
 
     path = Path(args.results_file).resolve() if args.results_file else latest_results_file()
     data = json.loads(path.read_text())
+
+    if args.export_dir:
+        export_svgs(data, Path(args.export_dir))
+        return
 
     out_path = ROOT / args.output
     out_path.write_text(render_html(data))
