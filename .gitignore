@@ -6,6 +6,7 @@ results/
 __pycache__/
 target/
 *.o
+report.html
 # pixi environments
 .pixi/*
 !.pixi/config.toml

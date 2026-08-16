@@ -16,6 +16,17 @@ workloads:
   path to this (C needs AVX intrinsics, Rust needs nightly `portable_simd`
   or `unsafe` arch intrinsics, Java needs the incubator Vector API, Python
   would need numpy) — the runner just reports them as skipped.
+- **primes_parallel** — C/Rust/Java/Python only. Counts primes below N with
+  4 worker threads/processes (C `pthread`, Rust `std::thread`, Java
+  `Thread`, **Python `multiprocessing`** since threads are GIL-bound for
+  CPU work). No Mojo entry: current stable Mojo has no OS-thread API, only
+  an experimental async `TaskGroup` the mojo-syntax skill says isn't ready
+  to use yet.
+- **ipvalidate** — hand-rolled dotted-quad string validator (no regex
+  anywhere, including Mojo which has none in stdlib), exercises each
+  language's raw string/char handling.
+- **allocchurn** — many small alloc/use/free cycles; shows allocator and GC
+  overhead (see peak RSS below — Java's heap balloons here).
 
 ## Setup
 
@@ -38,6 +49,16 @@ python3 runner/run.py --repeats 10 --json    # more samples, dump results/<times
 Each benchmark program self-checks its own output (e.g. sort verifies the
 array is sorted, matmul spot-checks a cell) and exits non-zero on failure —
 the runner reports that language as failed rather than printing a bogus time.
+
+Every run also captures peak RSS via `/usr/bin/time -v` alongside wall time,
+shown as a "peak RSS (MB)" column and saved in the JSON output.
+
+```sh
+python3 runner/history.py                   # trend across all past --json runs
+python3 runner/history.py --benchmark sort   # just one benchmark
+python3 runner/report.py                     # HTML bar-chart report from the latest run
+python3 runner/report.py results/foo.json -o out.html
+```
 
 ## Timing methodology
 

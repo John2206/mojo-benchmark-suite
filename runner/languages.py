@@ -26,7 +26,7 @@ LANGUAGES = {
     "c": Language(
         name="C",
         src_filename=lambda stem: f"{stem}.c",
-        build=lambda src, bin_dir, stem: ["gcc", "-O2", "-o", str(bin_dir / stem), str(src), "-lm"],
+        build=lambda src, bin_dir, stem: ["gcc", "-O2", "-o", str(bin_dir / stem), str(src), "-lm", "-lpthread"],
         run=lambda src, bin_dir, stem, args: [str(bin_dir / stem), *args],
     ),
     "rust": Language(
@@ -66,4 +66,7 @@ BENCHMARKS = {
     "nbody": {"folder": "nbody", "stem": "nbody", "default_size": 300},
     "wordcount": {"folder": "wordcount", "stem": "wordcount", "default_size": 2_000_000},
     "mandelbrot_simd": {"folder": "mandelbrot_simd", "stem": "mandelbrot_simd", "default_size": 800},
+    "primes_parallel": {"folder": "primes_parallel", "stem": "primes_parallel", "default_size": 2_000_000},
+    "ipvalidate": {"folder": "ipvalidate", "stem": "ipvalidate", "default_size": 2_000_000},
+    "allocchurn": {"folder": "allocchurn", "stem": "allocchurn", "default_size": 5_000_000},
 }

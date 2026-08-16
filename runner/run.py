@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 import subprocess
 import time
@@ -20,6 +21,8 @@ from languages import BENCHMARKS, LANGUAGES, ROOT
 BENCH_DIR = ROOT / "benchmarks"
 BIN_DIR = ROOT / "bin"
 RESULTS_DIR = ROOT / "results"
+
+MAX_RSS_RE = re.compile(r"Maximum resident set size \(kbytes\): (\d+)")
 
 
 def build(lang_key: str, bench_key: str) -> tuple[Path, Path, str] | None:
@@ -43,12 +46,13 @@ def build(lang_key: str, bench_key: str) -> tuple[Path, Path, str] | None:
     return src, bin_dir, stem
 
 
-def run_timed(lang_key: str, built: tuple[Path, Path, str], size: int, repeats: int) -> list[float] | None:
+def run_timed(lang_key: str, built: tuple[Path, Path, str], size: int, repeats: int) -> tuple[list[float], list[int]] | None:
     lang = LANGUAGES[lang_key]
     src, bin_dir, stem = built
-    cmd = lang.run(src, bin_dir, stem, [str(size)])
+    cmd = ["/usr/bin/time", "-v", *lang.run(src, bin_dir, stem, [str(size)])]
 
     times = []
+    peak_rss_kb = []
     for _ in range(repeats):
         start = time.perf_counter()
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -56,8 +60,10 @@ def run_timed(lang_key: str, built: tuple[Path, Path, str], size: int, repeats: 
         if result.returncode != 0:
             print(f"  [{lang.name}] RUN FAILED: {result.stderr.strip()}")
             return None
+        match = MAX_RSS_RE.search(result.stderr)
         times.append(elapsed)
-    return times
+        peak_rss_kb.append(int(match.group(1)) if match else 0)
+    return times, peak_rss_kb
 
 
 def run_benchmark(bench_key: str, size: int, repeats: int) -> dict:
@@ -71,20 +77,22 @@ def run_benchmark(bench_key: str, size: int, repeats: int) -> dict:
             if not src.exists():
                 print(f"  [{lang.name}] skipped: no source yet ({src.relative_to(ROOT)})")
             continue
-        times = run_timed(lang_key, built, size, repeats)
-        if times is None:
+        timed = run_timed(lang_key, built, size, repeats)
+        if timed is None:
             continue
+        times, peak_rss_kb = timed
         rows.append({
             "language": lang.name,
             "min": min(times),
             "median": statistics.median(times),
             "runs": times,
+            "peak_rss_mb": max(peak_rss_kb) / 1024,
         })
 
     rows.sort(key=lambda r: r["min"])
-    print(f"  {'Language':<10} {'min (s)':>10} {'median (s)':>12}")
+    print(f"  {'Language':<10} {'min (s)':>10} {'median (s)':>12} {'peak RSS (MB)':>14}")
     for row in rows:
-        print(f"  {row['language']:<10} {row['min']:>10.4f} {row['median']:>12.4f}")
+        print(f"  {row['language']:<10} {row['min']:>10.4f} {row['median']:>12.4f} {row['peak_rss_mb']:>14.1f}")
 
     return {"benchmark": bench_key, "size": size, "repeats": repeats, "results": rows}
 
