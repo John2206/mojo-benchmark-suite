@@ -1,13 +1,22 @@
 # mojo-benchmark-suite
 
 Cross-language benchmark suite comparing **Mojo**, **C**, **Rust**, **Java**,
-and **Python** on nine workloads — from tight numeric loops to hash maps,
-threading, and hand-rolled SIMD. One CLI runner builds, times, and
-self-checks every language's implementation of every benchmark, and reports
-wall-clock time *and* peak memory.
+and **Python** on thirteen workloads — from tight numeric loops to hash maps,
+threading, trees/graphs, and hand-rolled SIMD and JSON parsing. One CLI
+runner builds, times, and self-checks every language's implementation of
+every benchmark, and reports wall-clock time *and* peak memory.
 
 This is a personal project for exploring where Mojo actually wins, where it
 doesn't (yet), and how it compares to the languages people already reach for.
+
+## Results at a glance
+
+<img src="docs/results/mandelbrot-time.svg" alt="mandelbrot time comparison" width="380"><img src="docs/results/allocchurn-rss.svg" alt="allocchurn peak RSS comparison" width="380">
+<img src="docs/results/sort-time.svg" alt="sort time comparison" width="380">
+
+Full numbers for every benchmark: [`docs/results/reference-run.json`](docs/results/reference-run.json).
+Regenerate these charts yourself with `python3 runner/run.py --benchmark all --json`
+then `python3 runner/report.py results/<file>.json --export-dir docs/results`.
 
 ## Benchmarks
 
@@ -23,6 +32,9 @@ doesn't (yet), and how it compares to the languages people already reach for.
 | `primes_parallel` | 4-way multi-threaded/multi-process prime counting | C, Rust, Java, Python | up to N=2,000,000 |
 | `ipvalidate` | hand-rolled string parsing (no regex anywhere) | C, Rust, Java, Python, Mojo | 2,000,000 strings |
 | `allocchurn` | many small alloc/use/free cycles — allocator and GC pressure | C, Rust, Java, Python, Mojo | 5,000,000 iterations |
+| `graph_bfs` | BFS traversal of a fixed-width adjacency list (guaranteed connected) | C, Rust, Java, Python, Mojo | 500,000 nodes |
+| `bst` | binary search tree build + in-order traversal | C, Rust, Java, Python, Mojo | 300,000 keys |
+| `json_roundtrip` | hand-rolled JSON encode then decode for a fixed schema (no library anywhere) | C, Rust, Java, Python, Mojo | 200,000 records |
 
 `primes_parallel` has no Mojo entry (current stable Mojo has no OS-thread
 API — see [Design notes](#design-notes)). Every other benchmark covers all
@@ -79,8 +91,8 @@ python3 runner/run.py --repeats 10 --json      # more samples per language, dump
 | `--repeats N` | how many times to run each language (default 5); the table reports min and median |
 | `--json` | write the full results, including every individual run, to `results/<UTC timestamp>.json` |
 
-Sample real output (`sort`, `mandelbrot` — see `results/*.json` for the full
-9-benchmark history):
+Sample real output (`sort`, `mandelbrot` — see [Results at a glance](#results-at-a-glance)
+and `docs/results/reference-run.json` for the full 13-benchmark picture):
 
 ```
 === sort (size=2000000) ===
@@ -171,6 +183,10 @@ loop) without the runner caring.
   compiler flag: C uses `__attribute__((target("avx2")))`, Rust uses
   `#[target_feature(enable = "avx2")]` — both mean the rest of each
   language's benchmarks keep compiling for a generic target.
+- **`json_roundtrip` uses a fixed schema with no RNG anywhere**, so unlike
+  every other benchmark, all 5 languages print the exact same output number
+  for a given size — a bonus cross-language sanity check on top of each
+  language's own self-check.
 
 ## License
 
