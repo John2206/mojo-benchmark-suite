@@ -203,6 +203,21 @@ loop) without the runner caring.
   800×800), compare them by throughput, not raw time: Mojo's GPU kernel
   processes ~4.8x more pixels/second than Mojo's own CPU SIMD version, and
   CuPy hits ~175x numpy's CPU throughput.
+- **Don't compare Mojo's and Python's `mandelbrot_gpu` times to each other**
+  — unlike every CPU benchmark in this suite, that comparison is measuring
+  the wrong thing. Timed across grid sizes 64×64 through 8192×8192, the
+  Mojo-vs-CuPy gap stays a near-constant ~0.15-0.2s regardless of pixel
+  count (even 64×64, with virtually no compute, still costs Mojo ~0.63s vs
+  CuPy's ~0.44s) — the numbers are dominated by fixed process-startup cost,
+  not kernel throughput. Peak RSS confirms it: Mojo's process uses ~1.4GB
+  vs CuPy's ~400MB even for the tiny case, pointing at MAX's heavier
+  per-process runtime init (JIT/compiler infrastructure, driver bindings)
+  versus CuPy just opening a CUDA context and JIT-compiling via NVRTC. This
+  doesn't happen on CPU benchmarks because there the language's own
+  generated code *is* the hot loop being measured; on GPU, once a kernel is
+  launched, the actual math runs as compiled PTX on the same CUDA cores
+  regardless of which host language dispatched it — only setup/dispatch/
+  readback cost differs, and that's what these numbers actually show.
 
 ## License
 
