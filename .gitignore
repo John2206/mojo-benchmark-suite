@@ -1,0 +1,8 @@
+bin/
+results/
+*.class
+.pixi/
+.venv/
+__pycache__/
+target/
+*.o

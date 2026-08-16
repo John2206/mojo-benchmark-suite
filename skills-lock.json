@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "skills": {
+    "benchmark-model": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "benchmark-model/SKILL.md",
+      "computedHash": "3ab3b8d7eb18ac133eddc146b3ec0c91fa9712763c5a7388d4637bfc51da21d2"
+    },
+    "closure_migration": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "closure_migration/SKILL.md",
+      "computedHash": "ee3c1eb76d99c22df1b157a63887b93c421d5dbd8728f7ae9852db04c612c4ea"
+    },
+    "debug-model": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "debug-model/SKILL.md",
+      "computedHash": "80fcfe7e3a19f41bc759910f30fe9119003a999a470255a83f628ee9ef44e8af"
+    },
+    "eval-model": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "eval-model/SKILL.md",
+      "computedHash": "2589b27e91e8e3c44bbe36500ba34e97f97187bad9c65e7c9e0d33f97d416852"
+    },
+    "import-model": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "import-model/SKILL.md",
+      "computedHash": "b2089a8b854775e096abb0fa0e80f7027b5e7627b79bcc63a30e7e2b3c366ef6"
+    },
+    "mojo-gpu-fundamentals": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "mojo-gpu-fundamentals/SKILL.md",
+      "computedHash": "519eb8d52b262a1a40e410b9b56192c56bf3b8645d4636cf9a8f42ab371e0c94"
+    },
+    "mojo-python-interop": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "mojo-python-interop/SKILL.md",
+      "computedHash": "0bdffb6ba574327afadafb5265d95217435ffc9e11bff7f8fdf1073b4b2677cd"
+    },
+    "mojo-syntax": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "mojo-syntax/SKILL.md",
+      "computedHash": "9b12c81b5453be4745b22d53306a493615a4318060efa5e78aa144eb2d984a52"
+    },
+    "new-modular-project": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "new-modular-project/SKILL.md",
+      "computedHash": "9804e8faec54387aed15d2c537140a87f35d3381e4c0dd766bf7a0e40d3e1dfd"
+    },
+    "profile-model": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "profile-model/SKILL.md",
+      "computedHash": "e8b0e03dc18ba36a274837ed1af67456712c358a17437e176be4c2b0c0dc8b0d"
+    },
+    "serve-model": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "skillPath": "serve-model/SKILL.md",
+      "computedHash": "446faeedc9c87ba4137f49ae3d2d5b19eec376ebcbddb3339fff2af1bd853ab4"
+    }
+  }
+}
