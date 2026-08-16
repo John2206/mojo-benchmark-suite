@@ -10,12 +10,19 @@ workloads:
 - **nbody** — O(n²) pairwise gravity simulation, momentum-conserving
 - **wordcount** — hash map insert/increment over a small fixed vocabulary
   (C uses a hand-rolled open-addressing table — C has no stdlib hash map)
-- **mandelbrot_simd** — Mojo only. Same fractal, but 4 pixels at a time using
-  Mojo's native `SIMD` type with lane masking, ~20% faster than scalar Mojo
-  and edges out scalar C/Rust too. The other languages don't have a stdlib
-  path to this (C needs AVX intrinsics, Rust needs nightly `portable_simd`
-  or `unsafe` arch intrinsics, Java needs the incubator Vector API, Python
-  would need numpy) — the runner just reports them as skipped.
+- **mandelbrot_simd** — same fractal, but explicitly vectorized in each
+  language, and each one beats its own scalar `mandelbrot` time at the same
+  size: C and Rust use AVX2 intrinsics (`<immintrin.h>` /
+  `std::arch::x86_64`, scoped to the SIMD function via a `target`/
+  `target_feature` attribute rather than a global compile flag) processing 4
+  pixels at a time with lane masking; Mojo uses its native `SIMD` type the
+  same way; Java uses the incubator Vector API (`jdk.incubator.vector`,
+  needs `--add-modules jdk.incubator.vector` — already wired into
+  `runner/languages.py`); Python uses numpy (`sudo apt install
+  python3-numpy`), but operates on the **whole n×n grid at once** via numpy's
+  own vectorization rather than a hand-chunked 4-lane loop like the other 4 —
+  that's the realistic idiomatic numpy approach, not an artificial
+  restriction to match the others.
 - **primes_parallel** — C/Rust/Java/Python only. Counts primes below N with
   4 worker threads/processes (C `pthread`, Rust `std::thread`, Java
   `Thread`, **Python `multiprocessing`** since threads are GIL-bound for
@@ -33,7 +40,8 @@ workloads:
 - C: `gcc` (already on most systems)
 - Rust: [rustup](https://rustup.rs)
 - Java: JDK (`javac`/`java`)
-- Python: `python3`
+- Python: `python3`, plus `sudo apt install python3-numpy` (only needed for
+  `mandelbrot_simd`)
 - Mojo: [pixi](https://pixi.prefix.dev), then `pixi add mojo` (already
   configured in `pixi.toml`)
 

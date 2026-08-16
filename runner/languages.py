@@ -38,8 +38,8 @@ LANGUAGES = {
     "java": Language(
         name="Java",
         src_filename=lambda stem: f"{_java_class(stem)}.java",
-        build=lambda src, bin_dir, stem: ["javac", str(src), "-d", str(bin_dir)],
-        run=lambda src, bin_dir, stem, args: ["java", "-cp", str(bin_dir), _java_class(stem), *args],
+        build=lambda src, bin_dir, stem: ["javac", "--add-modules", "jdk.incubator.vector", str(src), "-d", str(bin_dir)],
+        run=lambda src, bin_dir, stem, args: ["java", "--add-modules", "jdk.incubator.vector", "-cp", str(bin_dir), _java_class(stem), *args],
     ),
     "python": Language(
         name="Python",
