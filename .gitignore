@@ -6,3 +6,6 @@ results/
 __pycache__/
 target/
 *.o
+# pixi environments
+.pixi/*
+!.pixi/config.toml
