@@ -1,10 +1,11 @@
 # mojo-benchmark-suite
 
 Cross-language benchmark suite comparing **Mojo**, **C**, **Rust**, **Java**,
-and **Python** on thirteen workloads — from tight numeric loops to hash maps,
-threading, trees/graphs, and hand-rolled SIMD and JSON parsing. One CLI
-runner builds, times, and self-checks every language's implementation of
-every benchmark, and reports wall-clock time *and* peak memory.
+and **Python** on fourteen workloads — from tight numeric loops to hash maps,
+threading, trees/graphs, hand-rolled SIMD/JSON parsing, and a native GPU
+kernel. One CLI runner builds, times, and self-checks every language's
+implementation of every benchmark, and reports wall-clock time *and* peak
+memory.
 
 This is a personal project for exploring where Mojo actually wins, where it
 doesn't (yet), and how it compares to the languages people already reach for.
@@ -35,11 +36,13 @@ then `python3 runner/report.py results/<file>.json --export-dir docs/results`.
 | `graph_bfs` | BFS traversal of a fixed-width adjacency list (guaranteed connected) | C, Rust, Java, Python, Mojo | 500,000 nodes |
 | `bst` | binary search tree build + in-order traversal | C, Rust, Java, Python, Mojo | 300,000 keys |
 | `json_roundtrip` | hand-rolled JSON encode then decode for a fixed schema (no library anywhere) | C, Rust, Java, Python, Mojo | 200,000 records |
+| `mandelbrot_gpu` | the same fractal again, one GPU thread per pixel (Mojo `max.gpu.host.DeviceContext`, Python `cupy.RawKernel`) | Python, Mojo | 4096×4096 grid |
 
 `primes_parallel` has no Mojo entry (current stable Mojo has no OS-thread
-API — see [Design notes](#design-notes)). Every other benchmark covers all
-5 languages. The runner handles missing per-language sources gracefully, so
-it's easy to add more languages to a benchmark later, or vice versa.
+API — see [Design notes](#design-notes)). `mandelbrot_gpu` has no C/Rust/Java
+entry (see below). Every other benchmark covers all 5 languages. The runner
+handles missing per-language sources gracefully, so it's easy to add more
+languages to a benchmark later, or vice versa.
 
 ## Requirements
 
@@ -48,12 +51,14 @@ it's easy to add more languages to a benchmark later, or vice versa.
 | C | `gcc` (preinstalled on most Linux distros) |
 | Rust | [rustup](https://rustup.rs): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | Java | JDK 17+ (`javac`/`java` on `PATH`) — the Vector API used by `mandelbrot_simd` is an incubator module available since JDK 16 |
-| Python | `python3` (3.9+), plus `sudo apt install python3-numpy` — only needed for `mandelbrot_simd` |
-| Mojo | [pixi](https://pixi.prefix.dev): `curl -fsSL https://pixi.sh/install.sh \| sh`, then `pixi add mojo` (already configured in this repo's `pixi.toml`, so just run `pixi install` after cloning) |
+| Python | `python3` (3.9+), plus `sudo apt install python3-numpy` (for `mandelbrot_simd`) and `pip install --user cupy-cuda12x[ctk]` (for `mandelbrot_gpu`, NVIDIA GPU only) |
+| Mojo | [pixi](https://pixi.prefix.dev): `curl -fsSL https://pixi.sh/install.sh \| sh`, then `pixi install` (this repo's `pixi.toml` already depends on `mojo` and `max`, the latter needed for `mandelbrot_gpu`'s GPU host API) |
 
 You don't need all five to use the suite — the runner builds whatever
 languages have source files for a given benchmark and reports the rest as
-skipped.
+skipped. `mandelbrot_gpu` additionally needs an NVIDIA GPU with driver 580+
+(check with `nvidia-smi`) — no CUDA toolkit/`nvcc` required for either
+Mojo or the CuPy path.
 
 ## Quick start
 
@@ -92,7 +97,7 @@ python3 runner/run.py --repeats 10 --json      # more samples per language, dump
 | `--json` | write the full results, including every individual run, to `results/<UTC timestamp>.json` |
 
 Sample real output (`sort`, `mandelbrot` — see [Results at a glance](#results-at-a-glance)
-and `docs/results/reference-run.json` for the full 13-benchmark picture):
+and `docs/results/reference-run.json` for the full 14-benchmark picture):
 
 ```
 === sort (size=2000000) ===
@@ -187,6 +192,17 @@ loop) without the runner caring.
   every other benchmark, all 5 languages print the exact same output number
   for a given size — a bonus cross-language sanity check on top of each
   language's own self-check.
+- **`mandelbrot_gpu` only covers Mojo and Python.** Both need just the
+  NVIDIA driver — Mojo's GPU support compiles its own kernels (no `nvcc`),
+  and `cupy.RawKernel` JIT-compiles CUDA C via NVRTC using pip-installed
+  headers, not a system toolkit. C, Rust, and Java would need actual
+  `nvcc`-compiled kernels, which means Ubuntu's `nvidia-cuda-toolkit` apt
+  package — 73 packages, GUI profilers (nsight-compute/systems), and an
+  unrelated OpenJDK 8 JRE along for the ride. Skipped for now. Since the GPU
+  version runs a much bigger grid (4096×4096 vs. `mandelbrot_simd`'s
+  800×800), compare them by throughput, not raw time: Mojo's GPU kernel
+  processes ~4.8x more pixels/second than Mojo's own CPU SIMD version, and
+  CuPy hits ~175x numpy's CPU throughput.
 
 ## License
 
