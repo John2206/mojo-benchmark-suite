@@ -72,4 +72,5 @@ BENCHMARKS = {
     "graph_bfs": {"folder": "graph_bfs", "stem": "graph_bfs", "default_size": 500_000},
     "bst": {"folder": "bst", "stem": "bst", "default_size": 300_000},
     "json_roundtrip": {"folder": "json_roundtrip", "stem": "json_roundtrip", "default_size": 200_000},
+    "mandelbrot_gpu": {"folder": "mandelbrot_gpu", "stem": "mandelbrot_gpu", "default_size": 4096},
 }
