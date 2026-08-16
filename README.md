@@ -1,8 +1,15 @@
 # mojo-benchmark-suite
 
 Compares Mojo against Java, Python, C, and Rust on identical small
-workloads: fibonacci (recursive), sort (builtin sort of random ints), and
-matrix multiply (naive triple loop).
+workloads:
+
+- **fib** — recursive fibonacci, function-call overhead
+- **sort** — builtin sort of random ints
+- **matmul** — naive triple-loop matrix multiply
+- **mandelbrot** — scalar per-pixel escape-time fractal (no explicit SIMD)
+- **nbody** — O(n²) pairwise gravity simulation, momentum-conserving
+- **wordcount** — hash map insert/increment over a small fixed vocabulary
+  (C uses a hand-rolled open-addressing table — C has no stdlib hash map)
 
 ## Setup
 
