@@ -65,4 +65,5 @@ BENCHMARKS = {
     "mandelbrot": {"folder": "mandelbrot", "stem": "mandelbrot", "default_size": 800},
     "nbody": {"folder": "nbody", "stem": "nbody", "default_size": 300},
     "wordcount": {"folder": "wordcount", "stem": "wordcount", "default_size": 2_000_000},
+    "mandelbrot_simd": {"folder": "mandelbrot_simd", "stem": "mandelbrot_simd", "default_size": 800},
 }

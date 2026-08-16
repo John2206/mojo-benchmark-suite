@@ -10,6 +10,12 @@ workloads:
 - **nbody** — O(n²) pairwise gravity simulation, momentum-conserving
 - **wordcount** — hash map insert/increment over a small fixed vocabulary
   (C uses a hand-rolled open-addressing table — C has no stdlib hash map)
+- **mandelbrot_simd** — Mojo only. Same fractal, but 4 pixels at a time using
+  Mojo's native `SIMD` type with lane masking, ~20% faster than scalar Mojo
+  and edges out scalar C/Rust too. The other languages don't have a stdlib
+  path to this (C needs AVX intrinsics, Rust needs nightly `portable_simd`
+  or `unsafe` arch intrinsics, Java needs the incubator Vector API, Python
+  would need numpy) — the runner just reports them as skipped.
 
 ## Setup
 
