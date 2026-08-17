@@ -1,7 +1,7 @@
 # mojo-benchmark-suite
 
 Cross-language benchmark suite comparing **Mojo**, **C**, **Rust**, **Java**,
-and **Python** on fifteen workloads — from tight numeric loops to hash maps,
+and **Python** on sixteen workloads — from tight numeric loops to hash maps,
 threading, trees/graphs, hand-rolled SIMD/JSON parsing, and a native GPU
 kernel. One CLI runner builds, times, and self-checks every language's
 implementation of every benchmark, and reports wall-clock time *and* peak
@@ -38,6 +38,7 @@ then `python3 runner/report.py results/<file>.json --export-dir docs/results`.
 | `json_roundtrip` | hand-rolled JSON encode then decode for a fixed schema (no library anywhere) | C, Rust, Java, Python, Mojo | 200,000 records |
 | `mandelbrot_gpu` | the same fractal again, one GPU thread per pixel (CUDA C/JNI shim in C and Java, raw CUDA Driver API FFI in Rust, `max.gpu.host.DeviceContext` in Mojo, `cupy.RawKernel` in Python) | C, Rust, Java, Python, Mojo | 4096×4096 grid |
 | `matmul_gpu` | the same naive matmul again, one GPU thread per output cell | C, Rust, Java, Python, Mojo | 2048×2048 |
+| `matmul_gpu_warm` | same naive matmul kernel (fixed 256×256), but one warm process launches it N times back to back instead of once | C, Rust, Java, Python, Mojo | `N=500` iterations |
 
 `primes_parallel` has no Mojo entry (current stable Mojo has no OS-thread
 API — see [Design notes](#design-notes)). Every other benchmark, including
@@ -49,21 +50,21 @@ benchmark later, or vice versa.
 
 | Language | Install |
 |---|---|
-| C | `gcc` (preinstalled on most Linux distros); `mandelbrot_gpu`/`matmul_gpu` are actual `.cu` files built with `nvcc` instead — see the CUDA toolkit note below |
-| Rust | [rustup](https://rustup.rs): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh`; `mandelbrot_gpu`/`matmul_gpu` also need `nvcc` (to compile the kernel to PTX) and link against `libcuda.so` directly — no extra crate |
-| Java | JDK 17+ (`javac`/`java` on `PATH`) — the Vector API used by `mandelbrot_simd` is an incubator module available since JDK 16; `mandelbrot_gpu`/`matmul_gpu` also need `nvcc` to build a small JNI shim (`-I $JAVA_HOME/include`) |
-| Python | `python3` (3.9+), plus `sudo apt install python3-numpy` (for `mandelbrot_simd`) and `pip install --user cupy-cuda12x[ctk]` (for `mandelbrot_gpu`/`matmul_gpu`, NVIDIA GPU only) |
-| Mojo | [pixi](https://pixi.prefix.dev): `curl -fsSL https://pixi.sh/install.sh \| sh`, then `pixi install` (this repo's `pixi.toml` already depends on `mojo` and `max`, the latter needed for `mandelbrot_gpu`/`matmul_gpu`'s GPU host API) |
+| C | `gcc` (preinstalled on most Linux distros); the 3 GPU benchmarks are actual `.cu` files built with `nvcc` instead — see the CUDA toolkit note below |
+| Rust | [rustup](https://rustup.rs): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh`; the 3 GPU benchmarks also need `nvcc` (to compile the kernel to PTX) and link against `libcuda.so` directly — no extra crate |
+| Java | JDK 17+ (`javac`/`java` on `PATH`) — the Vector API used by `mandelbrot_simd` is an incubator module available since JDK 16; the 3 GPU benchmarks also need `nvcc` to build a small JNI shim (`-I $JAVA_HOME/include`) |
+| Python | `python3` (3.9+), plus `sudo apt install python3-numpy` (for `mandelbrot_simd`) and `pip install --user cupy-cuda12x[ctk]` (for the 3 GPU benchmarks, NVIDIA GPU only) |
+| Mojo | [pixi](https://pixi.prefix.dev): `curl -fsSL https://pixi.sh/install.sh \| sh`, then `pixi install` (this repo's `pixi.toml` already depends on `mojo` and `max`, the latter needed for the 3 GPU benchmarks' GPU host API) |
 
 You don't need all five to use the suite — the runner builds whatever
 languages have source files for a given benchmark and reports the rest as
-skipped. `mandelbrot_gpu` and `matmul_gpu` need an NVIDIA GPU with driver
-580+ (check with `nvidia-smi`); Mojo and Python need only the driver
-(no CUDA toolkit), while **C, Rust, and Java need `nvidia-cuda-toolkit`
-installed** (`sudo apt install nvidia-cuda-toolkit` on Ubuntu — pulls in
-`nvcc` plus some GUI profilers/an unrelated OpenJDK 8 JRE you can ignore)
-since those three languages compile real `.cu` kernels ahead of time
-instead of JIT-compiling or using MAX's built-in compiler.
+skipped. `mandelbrot_gpu`, `matmul_gpu`, and `matmul_gpu_warm` need an
+NVIDIA GPU with driver 580+ (check with `nvidia-smi`); Mojo and Python need
+only the driver (no CUDA toolkit), while **C, Rust, and Java need
+`nvidia-cuda-toolkit` installed** (`sudo apt install nvidia-cuda-toolkit`
+on Ubuntu — pulls in `nvcc` plus some GUI profilers/an unrelated OpenJDK 8
+JRE you can ignore) since those three languages compile real `.cu` kernels
+ahead of time instead of JIT-compiling or using MAX's built-in compiler.
 
 ## Quick start
 
@@ -102,7 +103,7 @@ python3 runner/run.py --repeats 10 --json      # more samples per language, dump
 | `--json` | write the full results, including every individual run, to `results/<UTC timestamp>.json` |
 
 Sample real output (`sort`, `mandelbrot` — see [Results at a glance](#results-at-a-glance)
-and `docs/results/reference-run.json` for the full 15-benchmark picture):
+and `docs/results/reference-run.json` for the full 16-benchmark picture):
 
 ```
 === sort (size=2000000) ===
@@ -168,12 +169,13 @@ entry in the `BENCHMARKS` dict in `runner/languages.py`. No other code
 changes needed — that dict-driven design is why `primes_parallel` can skip
 Mojo and `mandelbrot_simd`'s Python entry can look structurally different
 (whole-grid numpy vectorization vs. everyone else's hand-chunked 4-lane
-loop) without the runner caring. The one exception: `mandelbrot_gpu` and
-`matmul_gpu`'s C/Rust/Java entries needed real build-command changes (`nvcc`
-instead of `gcc`/`rustc`/`javac`, a `GPU_BENCHMARKS` set checked inside
-those three languages' `build`/`src_filename` functions) since those two
-benchmarks are the only ones where a language's build command differs by
-benchmark, not just by language.
+loop) without the runner caring. The one exception: the 3 GPU benchmarks'
+C/Rust/Java entries needed real build-command changes (`nvcc` instead of
+`gcc`/`rustc`/`javac`, a `GPU_BENCHMARKS` set checked inside those three
+languages' `build`/`src_filename` functions) since they're the only
+benchmarks where a language's build command differs by benchmark, not just
+by language. Adding `matmul_gpu_warm` after the first two GPU benchmarks
+existed only needed one line — adding its name to that same set.
 
 ## Design notes
 
@@ -202,7 +204,8 @@ benchmark, not just by language.
   every other benchmark, all 5 languages print the exact same output number
   for a given size — a bonus cross-language sanity check on top of each
   language's own self-check.
-- **`mandelbrot_gpu` and `matmul_gpu` reach the GPU five different ways.**
+- **`mandelbrot_gpu`, `matmul_gpu`, and `matmul_gpu_warm` reach the GPU five
+  different ways.**
   Mojo compiles its own kernels via `max.gpu.host.DeviceContext` (no
   `nvcc`). Python's `cupy.RawKernel` JIT-compiles CUDA C via NVRTC from
   pip-installed headers (also no system toolkit). C is a plain `.cu` file
@@ -248,6 +251,28 @@ benchmark, not just by language.
   size. Treat GPU benchmark *time* comparisons across languages as "which
   language gets a kernel dispatched and torn down fastest," not a
   statement about generated-code quality — that's the CPU benchmarks' job.
+- **`matmul_gpu_warm` tests whether Mojo's overhead is one-time or
+  per-launch — and it's mostly one-time, but not entirely.** Every other
+  GPU benchmark here is single-shot (one process, one kernel launch), so
+  it can't distinguish "Mojo pays a fixed startup tax" from "Mojo is slower
+  every single time it talks to the GPU." `matmul_gpu_warm` launches the
+  same kernel (naive 256×256 matmul) `N` times in one warm process instead
+  of once, to isolate the two. Measured at `N=10`, `500`, and `5000`
+  iterations: the Mojo-vs-C time gap is 0.45s, 0.43s, and 0.90s
+  respectively — flat from 10 to 500, then clearly *growing* by 5000. That
+  growth means Mojo's per-iteration marginal cost (~0.22ms, fit from the
+  N=10→5000 slope) is genuinely higher than C's (~0.13ms) — about 1.7x —
+  not just its one-time startup. So the honest answer to "does more
+  warm-up let Mojo win" is: **no, not on this hardware with this kernel**.
+  The one-time-cost part of the hypothesis holds (extrapolating the same
+  fit back to `N=0` gives a ~0.45s fixed-cost gap, matching the single-shot
+  `mandelbrot_gpu`/`matmul_gpu` numbers above almost exactly) — but Mojo
+  also loses on marginal per-launch cost, so the *absolute* gap widens with
+  more iterations even as the *relative* ratio shrinks (Mojo took ~3.1x as
+  long as C at `N=10`, only ~2.1x at `N=5000`, trending toward the ~1.7x
+  per-iteration ratio as `N` grows further). Peak RSS stays flat at ~1.43GB
+  for Mojo and ~94MB for C/Rust regardless of `N`, confirming memory
+  footprint really is one-time, even though wall-clock time isn't.
 
 ## License
 

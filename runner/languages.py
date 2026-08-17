@@ -10,9 +10,10 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parent.parent
 PIXI = shutil.which("pixi") or str(Path.home() / ".pixi" / "bin" / "pixi")
 
-# mandelbrot_gpu and matmul_gpu need real nvcc-compiled kernels for C/Rust/Java
-# (Mojo and Python don't -- MAX compiles its own kernels, cupy.RawKernel JITs via NVRTC).
-GPU_BENCHMARKS = {"mandelbrot_gpu", "matmul_gpu"}
+# mandelbrot_gpu, matmul_gpu, and matmul_gpu_warm need real nvcc-compiled kernels
+# for C/Rust/Java (Mojo and Python don't -- MAX compiles its own kernels,
+# cupy.RawKernel JITs via NVRTC).
+GPU_BENCHMARKS = {"mandelbrot_gpu", "matmul_gpu", "matmul_gpu_warm"}
 
 
 @dataclass
@@ -124,4 +125,5 @@ BENCHMARKS = {
     "json_roundtrip": {"folder": "json_roundtrip", "stem": "json_roundtrip", "default_size": 200_000},
     "mandelbrot_gpu": {"folder": "mandelbrot_gpu", "stem": "mandelbrot_gpu", "default_size": 4096},
     "matmul_gpu": {"folder": "matmul_gpu", "stem": "matmul_gpu", "default_size": 2048},
+    "matmul_gpu_warm": {"folder": "matmul_gpu_warm", "stem": "matmul_gpu_warm", "default_size": 500},
 }
