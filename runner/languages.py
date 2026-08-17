@@ -134,4 +134,5 @@ BENCHMARKS = {
     "dijkstra": {"folder": "dijkstra", "stem": "dijkstra", "default_size": 300_000},
     "matmul_blocked": {"folder": "matmul_blocked", "stem": "matmul_blocked", "default_size": 600},
     "lz77": {"folder": "lz77", "stem": "lz77", "default_size": 5_000_000},
+    "montecarlo": {"folder": "montecarlo", "stem": "montecarlo", "default_size": 50_000_000},
 }
