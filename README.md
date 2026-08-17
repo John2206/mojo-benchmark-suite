@@ -37,12 +37,13 @@ then `python3 runner/report.py results/<file>.json --export-dir docs/results`.
 | `bst` | binary search tree build + in-order traversal | C, Rust, Java, Python, Mojo | 300,000 keys |
 | `json_roundtrip` | hand-rolled JSON encode then decode for a fixed schema (no library anywhere) | C, Rust, Java, Python, Mojo | 200,000 records |
 | `mandelbrot_gpu` | the same fractal again, one GPU thread per pixel (Mojo `max.gpu.host.DeviceContext`, Python `cupy.RawKernel`) | Python, Mojo | 4096×4096 grid |
+| `matmul_gpu` | the same naive matmul again, one GPU thread per output cell | Python, Mojo | 2048×2048 |
 
 `primes_parallel` has no Mojo entry (current stable Mojo has no OS-thread
-API — see [Design notes](#design-notes)). `mandelbrot_gpu` has no C/Rust/Java
-entry (see below). Every other benchmark covers all 5 languages. The runner
-handles missing per-language sources gracefully, so it's easy to add more
-languages to a benchmark later, or vice versa.
+API — see [Design notes](#design-notes)). `mandelbrot_gpu` and `matmul_gpu`
+have no C/Rust/Java entry (see below). Every other benchmark covers all 5
+languages. The runner handles missing per-language sources gracefully, so
+it's easy to add more languages to a benchmark later, or vice versa.
 
 ## Requirements
 
@@ -51,14 +52,14 @@ languages to a benchmark later, or vice versa.
 | C | `gcc` (preinstalled on most Linux distros) |
 | Rust | [rustup](https://rustup.rs): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | Java | JDK 17+ (`javac`/`java` on `PATH`) — the Vector API used by `mandelbrot_simd` is an incubator module available since JDK 16 |
-| Python | `python3` (3.9+), plus `sudo apt install python3-numpy` (for `mandelbrot_simd`) and `pip install --user cupy-cuda12x[ctk]` (for `mandelbrot_gpu`, NVIDIA GPU only) |
-| Mojo | [pixi](https://pixi.prefix.dev): `curl -fsSL https://pixi.sh/install.sh \| sh`, then `pixi install` (this repo's `pixi.toml` already depends on `mojo` and `max`, the latter needed for `mandelbrot_gpu`'s GPU host API) |
+| Python | `python3` (3.9+), plus `sudo apt install python3-numpy` (for `mandelbrot_simd`) and `pip install --user cupy-cuda12x[ctk]` (for `mandelbrot_gpu`/`matmul_gpu`, NVIDIA GPU only) |
+| Mojo | [pixi](https://pixi.prefix.dev): `curl -fsSL https://pixi.sh/install.sh \| sh`, then `pixi install` (this repo's `pixi.toml` already depends on `mojo` and `max`, the latter needed for `mandelbrot_gpu`/`matmul_gpu`'s GPU host API) |
 
 You don't need all five to use the suite — the runner builds whatever
 languages have source files for a given benchmark and reports the rest as
-skipped. `mandelbrot_gpu` additionally needs an NVIDIA GPU with driver 580+
-(check with `nvidia-smi`) — no CUDA toolkit/`nvcc` required for either
-Mojo or the CuPy path.
+skipped. `mandelbrot_gpu` and `matmul_gpu` additionally need an NVIDIA GPU
+with driver 580+ (check with `nvidia-smi`) — no CUDA toolkit/`nvcc` required
+for either Mojo or the CuPy path.
 
 ## Quick start
 
@@ -192,30 +193,38 @@ loop) without the runner caring.
   every other benchmark, all 5 languages print the exact same output number
   for a given size — a bonus cross-language sanity check on top of each
   language's own self-check.
-- **`mandelbrot_gpu` only covers Mojo and Python.** Both need just the
-  NVIDIA driver — Mojo's GPU support compiles its own kernels (no `nvcc`),
-  and `cupy.RawKernel` JIT-compiles CUDA C via NVRTC using pip-installed
-  headers, not a system toolkit. C, Rust, and Java would need actual
-  `nvcc`-compiled kernels, which means Ubuntu's `nvidia-cuda-toolkit` apt
-  package — 73 packages, GUI profilers (nsight-compute/systems), and an
+- **`mandelbrot_gpu` and `matmul_gpu` only cover Mojo and Python.** Both need
+  just the NVIDIA driver — Mojo's GPU support compiles its own kernels (no
+  `nvcc`), and `cupy.RawKernel` JIT-compiles CUDA C via NVRTC using
+  pip-installed headers, not a system toolkit. C, Rust, and Java would need
+  actual `nvcc`-compiled kernels, which means Ubuntu's `nvidia-cuda-toolkit`
+  apt package — 73 packages, GUI profilers (nsight-compute/systems), and an
   unrelated OpenJDK 8 JRE along for the ride. Skipped for now. Since the GPU
   version runs a much bigger grid (4096×4096 vs. `mandelbrot_simd`'s
   800×800), compare them by throughput, not raw time: Mojo's GPU kernel
   processes ~4.8x more pixels/second than Mojo's own CPU SIMD version, and
-  CuPy hits ~175x numpy's CPU throughput.
-- **Don't compare Mojo's and Python's `mandelbrot_gpu` times to each other**
-  — unlike every CPU benchmark in this suite, that comparison is measuring
-  the wrong thing. Timed across grid sizes 64×64 through 8192×8192, the
-  Mojo-vs-CuPy gap stays a near-constant ~0.15-0.2s regardless of pixel
-  count (even 64×64, with virtually no compute, still costs Mojo ~0.63s vs
-  CuPy's ~0.44s) — the numbers are dominated by fixed process-startup cost,
-  not kernel throughput. Peak RSS confirms it: Mojo's process uses ~1.4GB
-  vs CuPy's ~400MB even for the tiny case, pointing at MAX's heavier
-  per-process runtime init (JIT/compiler infrastructure, driver bindings)
-  versus CuPy just opening a CUDA context and JIT-compiling via NVRTC. This
-  doesn't happen on CPU benchmarks because there the language's own
-  generated code *is* the hot loop being measured; on GPU, once a kernel is
-  launched, the actual math runs as compiled PTX on the same CUDA cores
+  CuPy hits ~175x numpy's CPU throughput. `matmul_gpu`'s naive per-thread
+  dot product (2048×2048, no tiling/shared memory) is a heavier compute
+  workload per cell than Mandelbrot's escape-time loop, and it shows the
+  same GPU-vs-CPU gap: the CPU `matmul` benchmark takes ~1.9s on Python at
+  400×400 alone, while `matmul_gpu` finishes a 2048×2048 (25x more cells) in
+  well under a second on both Mojo and CuPy.
+- **Don't compare Mojo's and Python's `mandelbrot_gpu`/`matmul_gpu` times to
+  each other** — unlike every CPU benchmark in this suite, that comparison is
+  measuring the wrong thing. Timed across grid sizes 64×64 through 8192×8192
+  for `mandelbrot_gpu`, the Mojo-vs-CuPy gap stays a near-constant
+  ~0.15-0.2s regardless of pixel count (even 64×64, with virtually no
+  compute, still costs Mojo ~0.63s vs CuPy's ~0.44s) — the numbers are
+  dominated by fixed process-startup cost, not kernel throughput. Peak RSS
+  confirms it: Mojo's process uses ~1.4GB vs CuPy's ~400MB even for the tiny
+  case, pointing at MAX's heavier per-process runtime init (JIT/compiler
+  infrastructure, driver bindings) versus CuPy just opening a CUDA context
+  and JIT-compiling via NVRTC. `matmul_gpu` shows the identical fixed-cost
+  split (Mojo ~1.43GB peak RSS vs. CuPy's ~440MB, regardless of the actual
+  matmul size). This doesn't happen on CPU benchmarks because there the
+  language's own generated code *is* the hot loop being measured; on GPU,
+  once a kernel is launched, the actual math runs as compiled PTX on the
+  same CUDA cores
   regardless of which host language dispatched it — only setup/dispatch/
   readback cost differs, and that's what these numbers actually show.
 

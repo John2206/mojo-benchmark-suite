@@ -73,4 +73,5 @@ BENCHMARKS = {
     "bst": {"folder": "bst", "stem": "bst", "default_size": 300_000},
     "json_roundtrip": {"folder": "json_roundtrip", "stem": "json_roundtrip", "default_size": 200_000},
     "mandelbrot_gpu": {"folder": "mandelbrot_gpu", "stem": "mandelbrot_gpu", "default_size": 4096},
+    "matmul_gpu": {"folder": "matmul_gpu", "stem": "matmul_gpu", "default_size": 2048},
 }
