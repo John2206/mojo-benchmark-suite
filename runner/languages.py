@@ -132,4 +132,5 @@ BENCHMARKS = {
     "levenshtein": {"folder": "levenshtein", "stem": "levenshtein", "default_size": 5_000},
     "lru_cache": {"folder": "lru_cache", "stem": "lru_cache", "default_size": 2_000_000},
     "dijkstra": {"folder": "dijkstra", "stem": "dijkstra", "default_size": 300_000},
+    "matmul_blocked": {"folder": "matmul_blocked", "stem": "matmul_blocked", "default_size": 600},
 }
