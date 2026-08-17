@@ -128,4 +128,5 @@ BENCHMARKS = {
     "matmul_gpu_warm": {"folder": "matmul_gpu_warm", "stem": "matmul_gpu_warm", "default_size": 500},
     "crc32": {"folder": "crc32", "stem": "crc32", "default_size": 50_000_000},
     "base64": {"folder": "base64", "stem": "base64", "default_size": 20_000_000},
+    "sha256": {"folder": "sha256", "stem": "sha256", "default_size": 2_000_000},
 }
