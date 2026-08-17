@@ -1,7 +1,7 @@
 # mojo-benchmark-suite
 
 Cross-language benchmark suite comparing **Mojo**, **C**, **Rust**, **Java**,
-and **Python** on sixteen workloads — from tight numeric loops to hash maps,
+and **Python** on twenty-six workloads — from tight numeric loops to hash maps,
 threading, trees/graphs, hand-rolled SIMD/JSON parsing, and a native GPU
 kernel. One CLI runner builds, times, and self-checks every language's
 implementation of every benchmark, and reports wall-clock time *and* peak
@@ -39,6 +39,16 @@ then `python3 runner/report.py results/<file>.json --export-dir docs/results`.
 | `mandelbrot_gpu` | the same fractal again, one GPU thread per pixel (CUDA C/JNI shim in C and Java, raw CUDA Driver API FFI in Rust, `max.gpu.host.DeviceContext` in Mojo, `cupy.RawKernel` in Python) | C, Rust, Java, Python, Mojo | 4096×4096 grid |
 | `matmul_gpu` | the same naive matmul again, one GPU thread per output cell | C, Rust, Java, Python, Mojo | 2048×2048 |
 | `matmul_gpu_warm` | same naive matmul kernel (fixed 256×256), but one warm process launches it N times back to back instead of once | C, Rust, Java, Python, Mojo | `N=500` iterations |
+| `crc32` | table-driven CRC-32 (IEEE 802.3/zlib polynomial), hand-rolled, no library | C, Rust, Java, Python, Mojo | 50,000,000 bytes |
+| `base64` | RFC 4648 encode then decode roundtrip, hand-rolled, no library | C, Rust, Java, Python, Mojo | 20,000,000 bytes |
+| `sha256` | hand-rolled FIPS 180-4 SHA-256, no crypto library anywhere | C, Rust, Java, Python, Mojo | 2,000,000 bytes |
+| `levenshtein` | rolling 2-row edit-distance DP between two similar sequences | C, Rust, Java, Python, Mojo | 5,000-length strings |
+| `lru_cache` | hashmap + hand-rolled doubly-linked-list LRU eviction | C, Rust, Java, Python, Mojo | 2,000,000 operations |
+| `dijkstra` | weighted `graph_bfs`-style graph, binary-heap shortest path | C, Rust, Java, Python, Mojo | 300,000 nodes |
+| `matmul_blocked` | cache-blocked/tiled matmul — the real technique BLAS libraries use | C, Rust, Java, Python, Mojo | 600×600 |
+| `lz77` | hash-based LZ77 compress/decompress roundtrip, hand-rolled | C, Rust, Java, Python, Mojo | 5,000,000 bytes |
+| `montecarlo` | LCG-based Monte Carlo π estimation | C, Rust, Java, Python, Mojo | 50,000,000 samples |
+| `fft` | iterative radix-2 Cooley-Tukey FFT, forward + inverse roundtrip | C, Rust, Java, Python, Mojo | 1,048,576 samples |
 
 `primes_parallel` has no Mojo entry (current stable Mojo has no OS-thread
 API — see [Design notes](#design-notes)). Every other benchmark, including
@@ -103,7 +113,7 @@ python3 runner/run.py --repeats 10 --json      # more samples per language, dump
 | `--json` | write the full results, including every individual run, to `results/<UTC timestamp>.json` |
 
 Sample real output (`sort`, `mandelbrot` — see [Results at a glance](#results-at-a-glance)
-and `docs/results/reference-run.json` for the full 16-benchmark picture):
+and `docs/results/reference-run.json` for the full 26-benchmark picture):
 
 ```
 === sort (size=2000000) ===
@@ -204,6 +214,39 @@ existed only needed one line — adding its name to that same set.
   every other benchmark, all 5 languages print the exact same output number
   for a given size — a bonus cross-language sanity check on top of each
   language's own self-check.
+- **`lru_cache` and `dijkstra` extend `wordcount`'s hand-roll-only-where-
+  necessary precedent** to a hashmap+linked-list and a hashmap+priority-queue
+  respectively: C hand-rolls both (open addressing for the hashmap, an array-
+  based binary heap for Dijkstra — no stdlib option for either), Rust uses
+  `std::collections::HashMap`/`BinaryHeap`, Java uses `HashMap`/
+  `PriorityQueue`, Python uses `dict`/`heapq`. Only the genuinely novel data
+  structure in each benchmark is hand-rolled everywhere — the array-based
+  doubly-linked list for LRU ordering (no language has that built in).
+- **Not every new self-check is an exact-equality check.** `crc32`, `base64`,
+  and `sha256` check against real published spec test vectors.
+  `levenshtein` checks the classic `"kitten"`→`"sitting"`=3 textbook case.
+  `lz77` and `fft` check their own roundtrip (`decode(encode(x))==x`,
+  forward-then-inverse reconstructs the signal within `1e-6`) rather than a
+  fixed value. `dijkstra` and `lru_cache` check general structural
+  invariants (`dist[0]==0` and every distance bounded by the always-
+  available ring path; hit count exactly `max(0, n - working_set)`) instead
+  of a value hardcoded to one specific `--size` — the same lesson learned
+  the hard way while building `lru_cache`: an early version hardcoded a
+  magic hit-count number that only happened to be correct at the default
+  size, and silently "failed" at every other `--size`. `montecarlo`'s
+  tolerance is the one genuinely probabilistic check in the suite,
+  `10/sqrt(n)`-scaled so it holds at both the tight default-size estimate
+  and a loose small-`n` smoke test.
+- **`lz77`'s input needs deliberate repetition**, unlike this suite's usual
+  `(i*3+j)%13`-style arithmetic generators: a short pattern tiled across the
+  buffer with periodic mutation, so the hash-based match finder actually has
+  something to find. Pure arithmetic "noise" wouldn't compress at all and
+  would barely exercise the interesting code path.
+- **`fft` joins `mandelbrot`/`mandelbrot_gpu` as a benchmark whose printed
+  value isn't expected to match bit-for-bit across languages** — floating-
+  point associativity differs per language/compiler, so each language's
+  roundtrip reconstruction error converges to its own tiny value (~1e-10 to
+  1e-11 at the default size) rather than an identical one.
 - **`mandelbrot_gpu`, `matmul_gpu`, and `matmul_gpu_warm` reach the GPU five
   different ways.**
   Mojo compiles its own kernels via `max.gpu.host.DeviceContext` (no
