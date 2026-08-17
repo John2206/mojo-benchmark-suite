@@ -129,4 +129,5 @@ BENCHMARKS = {
     "crc32": {"folder": "crc32", "stem": "crc32", "default_size": 50_000_000},
     "base64": {"folder": "base64", "stem": "base64", "default_size": 20_000_000},
     "sha256": {"folder": "sha256", "stem": "sha256", "default_size": 2_000_000},
+    "levenshtein": {"folder": "levenshtein", "stem": "levenshtein", "default_size": 5_000},
 }
