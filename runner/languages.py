@@ -126,4 +126,5 @@ BENCHMARKS = {
     "mandelbrot_gpu": {"folder": "mandelbrot_gpu", "stem": "mandelbrot_gpu", "default_size": 4096},
     "matmul_gpu": {"folder": "matmul_gpu", "stem": "matmul_gpu", "default_size": 2048},
     "matmul_gpu_warm": {"folder": "matmul_gpu_warm", "stem": "matmul_gpu_warm", "default_size": 500},
+    "crc32": {"folder": "crc32", "stem": "crc32", "default_size": 50_000_000},
 }
