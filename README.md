@@ -12,8 +12,15 @@ doesn't (yet), and how it compares to the languages people already reach for.
 
 ## Results at a glance
 
+<img src="docs/results/leaderboard.svg" alt="cross-language leaderboard" width="380">
+
 <img src="docs/results/mandelbrot-time.svg" alt="mandelbrot time comparison" width="380"><img src="docs/results/allocchurn-rss.svg" alt="allocchurn peak RSS comparison" width="380">
 <img src="docs/results/sort-time.svg" alt="sort time comparison" width="380">
+
+The leaderboard ranks each language by geometric-mean speedup versus the
+fastest language on each benchmark it implements; the number in parentheses
+is how many of the 26 benchmarks that language was scored on (not every
+language implements every benchmark — see `primes_parallel` below).
 
 Full numbers for every benchmark: [`docs/results/reference-run.json`](docs/results/reference-run.json).
 Regenerate these charts yourself with `python3 runner/run.py --benchmark all --json`
@@ -147,14 +154,33 @@ can't silently win by being fast.
 ```sh
 python3 runner/history.py                     # time + memory trend across every past --json run
 python3 runner/history.py --benchmark sort     # just one benchmark
-python3 runner/report.py                       # static HTML bar-chart report from the latest run
+python3 runner/history.py --threshold 10       # flag regressions above 10% instead of the 5% default
+python3 runner/report.py                       # static HTML report from the latest run
 python3 runner/report.py results/foo.json -o out.html
+python3 runner/report.py --csv results.csv     # flat CSV instead of HTML, for spreadsheets/other tools
 ```
 
 `history.py` groups by (benchmark, language) and shows a `%` change between
-consecutive runs *of the same size* (different sizes aren't compared).
-`report.py` renders one time chart and one peak-memory chart per benchmark
-as plain hand-rolled SVG — no charting library, no new dependency.
+consecutive runs *of the same size* (different sizes aren't compared); a change
+worse than `--threshold` (default 5%) is marked `⚠ REGRESSION`, and a summary
+count prints at the end. For time, `--threshold` is a floor, not a fixed cutoff:
+the effective threshold also rises with that run's own measurement noise
+(2 × stdev as a % of mean), so a noisy benchmark needs a bigger jump before
+it's flagged — a run that's "10% slower" on a benchmark with 8% run-to-run
+noise isn't a regression, it's the noise floor. Peak RSS has no per-repeat
+samples to derive noise from, so it always uses the flat `--threshold`.
+
+`report.py` renders a per-benchmark summary table (min, median, mean ± stdev,
+throughput, peak RSS, speedup vs the fastest language — flagged `(noisy)` when
+stdev is more than 10% of the mean) plus the existing time/RSS bar charts,
+still plain hand-rolled SVG with no charting library. Throughput is `size /
+min time`; what "size" means is benchmark-specific (see the table above), so
+it's only meaningful compared across runs of the *same* benchmark, not across
+different benchmarks. A leaderboard section at the top ranks languages by
+geometric-mean speedup across every benchmark in the file; `--export-dir` also
+writes this out as a standalone `leaderboard.svg`. Mean/stdev are shown instead
+of percentiles because the default `--repeats 5` is too small a sample for
+percentiles to mean much.
 
 ## Project layout
 
