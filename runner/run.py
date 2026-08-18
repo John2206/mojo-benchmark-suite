@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import re
 import statistics
 import subprocess
@@ -17,11 +18,60 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import verify
-from languages import BENCHMARKS, LANGUAGES, ROOT
+from languages import BENCHMARKS, LANGUAGES, PIXI, ROOT, RUSTC
 
 BENCH_DIR = ROOT / "benchmarks"
 BIN_DIR = ROOT / "bin"
 RESULTS_DIR = ROOT / "results"
+
+
+def _cmd_version(cmd: list) -> str | None:
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        text = (result.stdout or result.stderr).strip().splitlines()
+        return text[0] if text else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def capture_env() -> dict:
+    """A fingerprint of the machine/toolchain this run happened on, so
+    history.py can tell "the numbers changed" apart from "the compiler
+    changed underneath the numbers"."""
+    loadavg = None
+    try:
+        loadavg = Path("/proc/loadavg").read_text().split()[:3]
+    except OSError:
+        pass
+    governor = None
+    try:
+        governor = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").read_text().strip()
+    except OSError:
+        pass
+    git_sha = None
+    try:
+        git_sha = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip() or None
+    except OSError:
+        pass
+
+    cpu_model = _cmd_version(["bash", "-c", "lscpu | grep 'Model name:' | sed 's/Model name:[[:space:]]*//'"])
+
+    return {
+        "cpu_model": cpu_model or platform.processor() or None,
+        "nproc": _cmd_version(["nproc"]),
+        "kernel": platform.release(),
+        "cpu_governor": governor,
+        "load_average": loadavg,
+        "git_sha": git_sha,
+        "gcc": _cmd_version(["gcc", "--version"]),
+        "rustc": _cmd_version([RUSTC, "--version"]),
+        "javac": _cmd_version(["javac", "--version"]),
+        "python3": _cmd_version(["python3", "--version"]),
+        "mojo": _cmd_version([PIXI, "run", "--manifest-path", str(ROOT / "pixi.toml"), "mojo", "--version"]),
+    }
 
 MAX_RSS_RE = re.compile(r"Maximum resident set size \(kbytes\): (\d+)")
 
@@ -171,7 +221,7 @@ def main() -> None:
         RESULTS_DIR.mkdir(exist_ok=True)
         out_path = RESULTS_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
         startup_s = {k: v for k, v in baselines.items()}
-        payload = {"env": {}, "startup_s": startup_s, "benchmarks": all_results}
+        payload = {"env": capture_env(), "startup_s": startup_s, "benchmarks": all_results}
         out_path.write_text(json.dumps(payload, indent=2))
         print(f"\nWrote {out_path.relative_to(ROOT)}")
 
