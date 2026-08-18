@@ -5,6 +5,11 @@
 """
 from __future__ import annotations
 
+import json
+import tempfile
+from pathlib import Path
+
+import resultsio
 import verify
 
 
@@ -32,6 +37,18 @@ def test_verify_rel_tol_within():
     assert result["verified"] is True, result
 
 
+def test_verify_rel_tol_multi_field():
+    entry = _entry(
+        C="0.000008 0.000015 0.000023",
+        Rust="0.000008 0.000015 0.000023",
+        Mojo="0.000008 0.000015 0.000023",
+        Java="0.000008 0.000015 0.000023",
+        Python="0.000008 0.000015 0.000023",
+    )
+    result = verify.check_outputs(entry, {"rel_tol": 1e-6})
+    assert result["verified"] is True, result
+
+
 def test_verify_rel_tol_outside():
     entry = _entry(C="3.14159012", Rust="3.20000000", Java="3.14159001", Python="3.14158999", Mojo="3.14159050")
     result = verify.check_outputs(entry, {"rel_tol": 1e-6})
@@ -44,6 +61,31 @@ def test_verify_skip_policy():
     assert result["verified"] is False, result
     assert "skipped" in result["reason"]
     assert "floating point" in result["reason"]
+
+
+def test_resultsio_legacy_bare_list():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "legacy.json"
+        path.write_text(json.dumps([{"benchmark": "fib", "size": 32, "repeats": 5, "results": []}]))
+        env, entries = resultsio.load_results(path)
+        assert env == {}, env
+        assert len(entries) == 1
+        assert entries[0]["benchmark"] == "fib"
+
+
+def test_resultsio_new_format():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "new.json"
+        payload = {
+            "env": {"gcc": "13.3.0"},
+            "startup_s": {"noop": {"C": 0.001}},
+            "benchmarks": [{"benchmark": "fib", "size": 32, "repeats": 5, "results": []}],
+        }
+        path.write_text(json.dumps(payload))
+        env, entries = resultsio.load_results(path)
+        assert env == {"gcc": "13.3.0"}, env
+        assert len(entries) == 1
+        assert entries[0]["benchmark"] == "fib"
 
 
 def main():

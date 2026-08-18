@@ -47,24 +47,37 @@ def _check_exact(outputs: dict) -> dict:
 
 
 def _check_rel_tol(outputs: dict, rel_tol: float) -> dict:
-    parsed = {}
+    """Splits each output on whitespace so multi-value lines (e.g. nbody's
+    "px py pz") are compared field-by-field, each against its own median."""
+    parsed: dict[str, list[float]] = {}
+    n_fields = None
     for lang, value in outputs.items():
+        fields = str(value).split()
         try:
-            parsed[lang] = float(value)
-        except (TypeError, ValueError):
+            parsed[lang] = [float(f) for f in fields]
+        except ValueError:
             return {
                 "verified": False,
                 "reason": f"{lang} output {value!r} is not a parseable float",
                 "outputs": outputs,
             }
-
-    median = statistics.median(parsed.values())
-    for lang, value in parsed.items():
-        denom = abs(median) if median != 0 else 1.0
-        if abs(value - median) / denom > rel_tol:
+        if n_fields is None:
+            n_fields = len(parsed[lang])
+        elif len(parsed[lang]) != n_fields:
             return {
                 "verified": False,
-                "reason": f"{lang}={value} outside rel_tol={rel_tol} of median={median}",
+                "reason": f"{lang} output {value!r} has {len(parsed[lang])} fields, expected {n_fields}",
                 "outputs": outputs,
             }
+
+    for i in range(n_fields or 0):
+        medians = statistics.median(parsed[lang][i] for lang in parsed)
+        denom = abs(medians) if medians != 0 else 1.0
+        for lang, values in parsed.items():
+            if abs(values[i] - medians) / denom > rel_tol:
+                return {
+                    "verified": False,
+                    "reason": f"{lang} field {i}={values[i]} outside rel_tol={rel_tol} of median={medians}",
+                    "outputs": outputs,
+                }
     return {"verified": True, "reason": f"within rel_tol={rel_tol} of median", "outputs": outputs}

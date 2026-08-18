@@ -9,15 +9,12 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
-import sys
 from collections import defaultdict
 from pathlib import Path
 
+import resultsio
 import stats
 from languages import ROOT
-
-RESULTS_DIR = ROOT / "results"
 
 COLORS = {
     "C": "#5b8dee",
@@ -34,13 +31,6 @@ BAR_GAP = 8
 
 # stdev/mean above this is flagged "(noisy)" in the summary table.
 NOISY_CV_THRESHOLD = 0.10
-
-
-def latest_results_file() -> Path:
-    files = sorted(RESULTS_DIR.glob("*.json"))
-    if not files:
-        sys.exit("No results/*.json files found — run with --json first.")
-    return files[-1]
 
 
 def render_chart(entry: dict, metric: str, fmt: str, unit: str, title: str = "") -> str:
@@ -83,7 +73,7 @@ def render_summary_table(entry: dict) -> str:
 
     lines = [
         '<table class="summary">',
-        "<tr><th>Language</th><th>min (s)</th><th>median (s)</th><th>mean &plusmn; stdev (s)</th>"
+        "<tr><th>Language</th><th>min (s)</th><th>compute (s)</th><th>median (s)</th><th>mean &plusmn; stdev (s)</th>"
         "<th>throughput (size/s)</th><th>peak RSS (MB)</th><th>speedup (vs fastest)</th></tr>",
     ]
     for row in rows:
@@ -95,8 +85,10 @@ def render_summary_table(entry: dict) -> str:
         rss = f'{row["peak_rss_mb"]:.1f}' if row.get("peak_rss_mb") is not None else "n/a"
         spd_str = f"{spd:.2f}x" if spd is not None else "n/a"
         thr_str = f"{thr:,.0f}" if thr is not None else "n/a"
+        compute = row.get("compute")
+        compute_str = f"{compute:.4f}" if compute is not None else "n/a &mdash; below startup baseline"
         lines.append(
-            f'<tr><td>{row["language"]}</td><td>{row["min"]:.4f}</td><td>{row["median"]:.4f}</td>'
+            f'<tr><td>{row["language"]}</td><td>{row["min"]:.4f}</td><td>{compute_str}</td><td>{row["median"]:.4f}</td>'
             f'<td>{rs["mean"]:.4f} &plusmn; {rs["stdev"]:.4f}{noisy}</td><td>{thr_str}</td>'
             f'<td>{rss}</td><td>{spd_str}</td></tr>'
         )
@@ -104,8 +96,13 @@ def render_summary_table(entry: dict) -> str:
     return "\n".join(lines)
 
 
-def leaderboard_scores(data: list[dict]) -> list[tuple[str, float, int]]:
+def leaderboard_scores(data: list[dict], metric: str = "min") -> list[tuple[str, float, int]]:
     """[(language, geomean speedup vs fastest, benchmarks scored), ...] sorted descending by score.
+
+    metric="min" scores wall-clock time (what you get running the program);
+    metric="compute" scores time-minus-startup-baseline (what the language
+    does once it's already up) and skips rows where compute is None (below
+    the startup baseline, i.e. too fast to separate from noise).
 
     Benchmarks whose cross-language outputs failed verification (entry["verified"]
     is False, e.g. an OUTPUT MISMATCH or an explicit skip policy) are excluded --
@@ -115,12 +112,12 @@ def leaderboard_scores(data: list[dict]) -> list[tuple[str, float, int]]:
     for entry in data:
         if entry.get("verified") is False:
             continue
-        rows = [r for r in entry["results"] if r.get("min") is not None]
+        rows = [r for r in entry["results"] if r.get(metric) is not None]
         if not rows:
             continue
-        baseline = min(rows, key=lambda r: r["min"])
+        baseline = min(rows, key=lambda r: r[metric])
         for row in rows:
-            spd = stats.speedup(row, baseline)
+            spd = stats.speedup(row, baseline, metric=metric)
             if spd is not None:
                 lang_ratios[row["language"]].append(spd)
 
@@ -132,23 +129,32 @@ def leaderboard_scores(data: list[dict]) -> list[tuple[str, float, int]]:
 
 
 def render_leaderboard(data: list[dict]) -> str:
-    scored = leaderboard_scores(data)
+    scored = leaderboard_scores(data, metric="min")
+    compute_scored = leaderboard_scores(data, metric="compute")
     if not scored:
         return ""
 
+    lines = ["<h2>Leaderboard</h2>", "<h3>wall-clock (what you get running the program)</h3>"]
+    lines += _leaderboard_table(scored)
+    if compute_scored:
+        lines.append("<h3>compute (time minus each language's startup baseline)</h3>")
+        lines += _leaderboard_table(compute_scored)
+    return "\n".join(lines)
+
+
+def _leaderboard_table(scored: list[tuple[str, float, int]]) -> list[str]:
     lines = [
-        "<h2>Leaderboard</h2>",
         '<table class="summary">',
         "<tr><th>Language</th><th>geomean speedup (vs fastest)</th><th>benchmarks scored</th></tr>",
     ]
     for language, score, n in scored:
         lines.append(f"<tr><td>{language}</td><td>{score:.2f}x</td><td>{n}</td></tr>")
     lines.append("</table>")
-    return "\n".join(lines)
+    return lines
 
 
-def render_leaderboard_svg(data: list[dict], title: str = "") -> str:
-    scored = leaderboard_scores(data)
+def render_leaderboard_svg(data: list[dict], title: str = "", metric: str = "min") -> str:
+    scored = leaderboard_scores(data, metric=metric)
     if not scored:
         return "<p><em>no data</em></p>"
     max_score = max(score for _, score, _ in scored)
@@ -187,7 +193,7 @@ def render_verify_note(entry: dict) -> str:
     reason = entry.get("verify_reason", "unknown reason")
     if reason.startswith("skipped:"):
         return f'<p class="verify-note">⚠ output verification skipped — {reason[len("skipped:"):].strip()}</p>'
-    outputs = "; ".join(f"{lang}={value}" for lang, value in sorted(entry.get("_verify_outputs", {}).items()))
+    outputs = "; ".join(f'{row["language"]}={row.get("output")}' for row in entry.get("results", []))
     detail = f" ({outputs})" if outputs else ""
     return f'<p class="verify-note mismatch">⚠ OUTPUT MISMATCH — {reason}{detail} — excluded from leaderboard</p>'
 
@@ -234,8 +240,12 @@ def export_svgs(data: list[dict], export_dir: Path) -> None:
     export_dir.mkdir(parents=True, exist_ok=True)
 
     lb_path = export_dir / "leaderboard.svg"
-    lb_path.write_text(render_leaderboard_svg(data, title="Leaderboard — geomean speedup vs fastest"))
+    lb_path.write_text(render_leaderboard_svg(data, title="Leaderboard — geomean speedup vs fastest (wall-clock)", metric="min"))
     print(f"Wrote {lb_path}")
+
+    lb_compute_path = export_dir / "leaderboard-compute.svg"
+    lb_compute_path.write_text(render_leaderboard_svg(data, title="Leaderboard — geomean speedup vs fastest (compute)", metric="compute"))
+    print(f"Wrote {lb_compute_path}")
 
     for entry in data:
         bench = entry["benchmark"]
@@ -252,8 +262,8 @@ def export_csv(data: list[dict], path: Path) -> None:
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
-            ["benchmark", "size", "language", "min", "median", "mean", "stdev",
-             "throughput_per_sec", "peak_rss_mb", "speedup_vs_fastest"]
+            ["benchmark", "size", "language", "min", "compute", "median", "mean", "stdev",
+             "throughput_per_sec", "peak_rss_mb", "speedup_vs_fastest", "verified", "verify_reason"]
         )
         for entry in data:
             rows = sorted(entry["results"], key=lambda r: r["min"])
@@ -264,17 +274,21 @@ def export_csv(data: list[dict], path: Path) -> None:
                 rs = stats.run_stats(row)
                 spd = stats.speedup(row, baseline)
                 thr = stats.throughput(row, entry["size"])
+                compute = row.get("compute")
                 writer.writerow([
                     entry["benchmark"],
                     entry["size"],
                     row["language"],
                     f'{row["min"]:.6f}',
+                    f"{compute:.6f}" if compute is not None else "",
                     f'{row["median"]:.6f}',
                     f'{rs["mean"]:.6f}',
                     f'{rs["stdev"]:.6f}',
                     f"{thr:.4f}" if thr is not None else "",
                     row["peak_rss_mb"] if row.get("peak_rss_mb") is not None else "",
                     f"{spd:.4f}" if spd is not None else "",
+                    entry.get("verified", ""),
+                    entry.get("verify_reason", ""),
                 ])
 
 
@@ -286,8 +300,8 @@ def main() -> None:
     parser.add_argument("--csv", default=None, help="write a flat CSV of every benchmark/language stat to this path instead of an HTML report")
     args = parser.parse_args()
 
-    path = Path(args.results_file).resolve() if args.results_file else latest_results_file()
-    data = json.loads(path.read_text())
+    path = Path(args.results_file).resolve() if args.results_file else resultsio.latest_results_file()
+    _env, data = resultsio.load_results(path)
 
     if args.export_dir:
         export_svgs(data, Path(args.export_dir))

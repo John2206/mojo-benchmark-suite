@@ -6,6 +6,17 @@ comptime G: Float64 = 1e-4
 comptime DT: Float64 = 1e-3
 
 
+def format6(value: Float64) -> String:
+    var sign = "-" if value < 0.0 else ""
+    var scaled = Int(abs(value) * 1000000.0 + 0.5)
+    var whole = scaled // 1000000
+    var frac = scaled % 1000000
+    var frac_str = String(frac)
+    while frac_str.byte_length() < 6:
+        frac_str = "0" + frac_str
+    return sign + String(whole) + "." + frac_str
+
+
 def main() raises:
     var args = argv()
     var n = 300
@@ -54,4 +65,4 @@ def main() raises:
     if abs(momentum_x) > 1e-6:
         raise Error("self-check failed: momentum not conserved")
 
-    print(px[0], py[0], pz[0])
+    print(format6(px[0]) + " " + format6(py[0]) + " " + format6(pz[0]))
