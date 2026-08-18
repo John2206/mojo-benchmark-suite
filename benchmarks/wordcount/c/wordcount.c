@@ -10,6 +10,13 @@ static const char *VOCAB[VOCAB_SIZE] = {
     "he", "was", "for", "on", "are", "as", "with", "his", "they", "at"
 };
 
+static unsigned int lcg_state;
+
+static long lcg_next(void) {
+    lcg_state = (lcg_state * 1103515245u + 12345u) & 0x7fffffffu;
+    return (long)lcg_state;
+}
+
 typedef struct {
     const char *key; /* NULL = empty slot */
     long count;
@@ -37,9 +44,9 @@ int main(int argc, char **argv) {
     long n = argc > 1 ? atol(argv[1]) : 2000000;
 
     Slot table[TABLE_CAP] = {0};
-    srand(42);
+    lcg_state = 42;
     for (long k = 0; k < n; k++) {
-        int idx = rand() % VOCAB_SIZE;
+        int idx = (int)(lcg_next() % VOCAB_SIZE);
         table_incr(table, VOCAB[idx]);
     }
 

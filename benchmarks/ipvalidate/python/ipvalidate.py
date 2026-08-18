@@ -1,4 +1,3 @@
-import random
 import sys
 
 
@@ -23,11 +22,20 @@ def main():
     assert not is_valid_ip("999.1.1.1"), "self-check failed: known-invalid IP accepted"
     assert not is_valid_ip("1.2.3"), "self-check failed: known-invalid IP accepted"
 
-    random.seed(42)
+    state = 42
+
+    def lcg_next():
+        nonlocal state
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        return state
+
     valid = 0
     for _ in range(n):
-        max_val = 255 if random.random() < 0.7 else 999
-        a, b, c, d = (random.randint(0, max_val) for _ in range(4))
+        max_val = 255 if lcg_next() % 10 < 7 else 999
+        a = lcg_next() % (max_val + 1)
+        b = lcg_next() % (max_val + 1)
+        c = lcg_next() % (max_val + 1)
+        d = lcg_next() % (max_val + 1)
         s = f"{a}.{b}.{c}.{d}"
         if is_valid_ip(s):
             valid += 1

@@ -9,6 +9,7 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parent.parent
 PIXI = shutil.which("pixi") or str(Path.home() / ".pixi" / "bin" / "pixi")
+RUSTC = shutil.which("rustc") or str(Path.home() / ".cargo" / "bin" / "rustc")
 
 # mandelbrot_gpu, matmul_gpu, and matmul_gpu_warm need real nvcc-compiled kernels
 # for C/Rust/Java (Mojo and Python don't -- MAX compiles its own kernels,
@@ -45,10 +46,10 @@ def _rust_build(src: Path, bin_dir: Path, stem: str) -> list:
         exe = bin_dir / stem
         cmd = (
             f"nvcc -ptx -arch=native {shlex.quote(str(kernel_src))} -o {shlex.quote(str(ptx))} "
-            f"&& rustc -O -o {shlex.quote(str(exe))} {shlex.quote(str(src))} -l cuda"
+            f"&& {shlex.quote(RUSTC)} -O -o {shlex.quote(str(exe))} {shlex.quote(str(src))} -l cuda"
         )
         return ["bash", "-c", cmd]
-    return ["rustc", "-O", "-o", str(bin_dir / stem), str(src)]
+    return [RUSTC, "-O", "-o", str(bin_dir / stem), str(src)]
 
 
 def _java_build(src: Path, bin_dir: Path, stem: str) -> list:
@@ -114,7 +115,7 @@ BENCHMARKS = {
     "sort": {"folder": "sort", "stem": "sort", "default_size": 2_000_000},
     "matmul": {"folder": "matmul", "stem": "matmul", "default_size": 400},
     "mandelbrot": {"folder": "mandelbrot", "stem": "mandelbrot", "default_size": 800},
-    "nbody": {"folder": "nbody", "stem": "nbody", "default_size": 300},
+    "nbody": {"folder": "nbody", "stem": "nbody", "default_size": 300, "verify": {"rel_tol": 1e-6}},
     "wordcount": {"folder": "wordcount", "stem": "wordcount", "default_size": 2_000_000},
     "mandelbrot_simd": {"folder": "mandelbrot_simd", "stem": "mandelbrot_simd", "default_size": 800},
     "primes_parallel": {"folder": "primes_parallel", "stem": "primes_parallel", "default_size": 2_000_000},
@@ -123,17 +124,19 @@ BENCHMARKS = {
     "graph_bfs": {"folder": "graph_bfs", "stem": "graph_bfs", "default_size": 500_000},
     "bst": {"folder": "bst", "stem": "bst", "default_size": 300_000},
     "json_roundtrip": {"folder": "json_roundtrip", "stem": "json_roundtrip", "default_size": 200_000},
-    "mandelbrot_gpu": {"folder": "mandelbrot_gpu", "stem": "mandelbrot_gpu", "default_size": 4096},
-    "matmul_gpu": {"folder": "matmul_gpu", "stem": "matmul_gpu", "default_size": 2048},
-    "matmul_gpu_warm": {"folder": "matmul_gpu_warm", "stem": "matmul_gpu_warm", "default_size": 500},
+    "mandelbrot_gpu": {"folder": "mandelbrot_gpu", "stem": "mandelbrot_gpu", "default_size": 4096, "baseline": "noop_gpu"},
+    "matmul_gpu": {"folder": "matmul_gpu", "stem": "matmul_gpu", "default_size": 2048, "verify": {"rel_tol": 1e-6}, "baseline": "noop_gpu"},
+    "matmul_gpu_warm": {"folder": "matmul_gpu_warm", "stem": "matmul_gpu_warm", "default_size": 500, "verify": {"rel_tol": 1e-6}, "baseline": "noop_gpu"},
     "crc32": {"folder": "crc32", "stem": "crc32", "default_size": 50_000_000},
     "base64": {"folder": "base64", "stem": "base64", "default_size": 20_000_000},
     "sha256": {"folder": "sha256", "stem": "sha256", "default_size": 2_000_000},
     "levenshtein": {"folder": "levenshtein", "stem": "levenshtein", "default_size": 5_000},
     "lru_cache": {"folder": "lru_cache", "stem": "lru_cache", "default_size": 2_000_000},
     "dijkstra": {"folder": "dijkstra", "stem": "dijkstra", "default_size": 300_000},
-    "matmul_blocked": {"folder": "matmul_blocked", "stem": "matmul_blocked", "default_size": 600},
+    "matmul_blocked": {"folder": "matmul_blocked", "stem": "matmul_blocked", "default_size": 600, "verify": {"rel_tol": 1e-6}},
     "lz77": {"folder": "lz77", "stem": "lz77", "default_size": 5_000_000},
-    "montecarlo": {"folder": "montecarlo", "stem": "montecarlo", "default_size": 50_000_000},
-    "fft": {"folder": "fft", "stem": "fft", "default_size": 1_048_576},
+    "montecarlo": {"folder": "montecarlo", "stem": "montecarlo", "default_size": 50_000_000, "verify": {"rel_tol": 1e-3}},
+    "fft": {"folder": "fft", "stem": "fft", "default_size": 1_048_576, "verify": {"skip": "each language's floating-point reconstruction error converges to its own tiny value (~1e-10 to 1e-11) due to differing associativity — not a meaningful cross-language comparison"}},
+    "noop": {"folder": "noop", "stem": "noop", "default_size": 0},
+    "noop_gpu": {"folder": "noop_gpu", "stem": "noop_gpu", "default_size": 0},
 }

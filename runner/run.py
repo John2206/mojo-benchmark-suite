@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import verify
 from languages import BENCHMARKS, LANGUAGES, ROOT
 
 BENCH_DIR = ROOT / "benchmarks"
@@ -46,13 +47,14 @@ def build(lang_key: str, bench_key: str) -> tuple[Path, Path, str] | None:
     return src, bin_dir, stem
 
 
-def run_timed(lang_key: str, built: tuple[Path, Path, str], size: int, repeats: int) -> tuple[list[float], list[int]] | None:
+def run_timed(lang_key: str, built: tuple[Path, Path, str], size: int, repeats: int) -> tuple[list[float], list[int], list[str]] | None:
     lang = LANGUAGES[lang_key]
     src, bin_dir, stem = built
     cmd = ["/usr/bin/time", "-v", *lang.run(src, bin_dir, stem, [str(size)])]
 
     times = []
     peak_rss_kb = []
+    stdouts = []
     for _ in range(repeats):
         start = time.perf_counter()
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -63,7 +65,8 @@ def run_timed(lang_key: str, built: tuple[Path, Path, str], size: int, repeats: 
         match = MAX_RSS_RE.search(result.stderr)
         times.append(elapsed)
         peak_rss_kb.append(int(match.group(1)) if match else 0)
-    return times, peak_rss_kb
+        stdouts.append(result.stdout.strip())
+    return times, peak_rss_kb, stdouts
 
 
 def run_benchmark(bench_key: str, size: int, repeats: int) -> dict:
@@ -80,13 +83,15 @@ def run_benchmark(bench_key: str, size: int, repeats: int) -> dict:
         timed = run_timed(lang_key, built, size, repeats)
         if timed is None:
             continue
-        times, peak_rss_kb = timed
+        times, peak_rss_kb, stdouts = timed
         rows.append({
             "language": lang.name,
             "min": min(times),
             "median": statistics.median(times),
             "runs": times,
             "peak_rss_mb": max(peak_rss_kb) / 1024,
+            "output": stdouts[0] if stdouts else None,
+            "output_stable": all(o == stdouts[0] for o in stdouts) if stdouts else True,
         })
 
     rows.sort(key=lambda r: r["min"])
@@ -94,7 +99,24 @@ def run_benchmark(bench_key: str, size: int, repeats: int) -> dict:
     for row in rows:
         print(f"  {row['language']:<10} {row['min']:>10.4f} {row['median']:>12.4f} {row['peak_rss_mb']:>14.1f}")
 
-    return {"benchmark": bench_key, "size": size, "repeats": repeats, "results": rows}
+    policy = info.get("verify", "exact")
+    verify_result = verify.check_outputs({"results": rows}, policy)
+    if not verify_result["verified"] and not (isinstance(policy, dict) and "skip" in policy):
+        print(f"  ⚠ OUTPUT MISMATCH: {verify_result['reason']}")
+        for lang_name, value in verify_result["outputs"].items():
+            print(f"    {lang_name}: {value}")
+    unstable = [row["language"] for row in rows if not row.get("output_stable", True)]
+    if unstable:
+        print(f"  ⚠ non-deterministic output across repeats: {', '.join(unstable)}")
+
+    return {
+        "benchmark": bench_key,
+        "size": size,
+        "repeats": repeats,
+        "results": rows,
+        "verified": verify_result["verified"],
+        "verify_reason": verify_result["reason"],
+    }
 
 
 def main() -> None:

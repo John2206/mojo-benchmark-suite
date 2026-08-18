@@ -1,15 +1,21 @@
 use std::env;
 
+struct Lcg {
+    state: u32,
+}
+
+impl Lcg {
+    fn next(&mut self) -> i64 {
+        self.state = self.state.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fffffff;
+        self.state as i64
+    }
+}
+
 fn main() {
     let n: usize = env::args().nth(1).map(|s| s.parse().unwrap()).unwrap_or(2_000_000);
 
-    let mut state: u64 = 42;
-    let mut arr: Vec<i64> = (0..n)
-        .map(|_| {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-            (state >> 33) as i64
-        })
-        .collect();
+    let mut lcg = Lcg { state: 42 };
+    let mut arr: Vec<i64> = (0..n).map(|_| lcg.next()).collect();
 
     arr.sort();
 

@@ -1,6 +1,11 @@
-import java.util.Random;
-
 public class Ipvalidate {
+    static int lcgState;
+
+    static long lcgNext() {
+        lcgState = (lcgState * 1103515245 + 12345) & 0x7fffffff;
+        return lcgState;
+    }
+
     static Integer parseGroup(String s) {
         if (s.isEmpty() || s.length() > 3) return null;
         for (int i = 0; i < s.length(); i++) {
@@ -42,14 +47,14 @@ public class Ipvalidate {
             System.exit(1);
         }
 
-        Random rnd = new Random(42);
+        lcgState = 42;
         long valid = 0;
         for (long i = 0; i < n; i++) {
-            int maxVal = rnd.nextInt(10) < 7 ? 255 : 999;
-            int a = rnd.nextInt(maxVal + 1);
-            int b = rnd.nextInt(maxVal + 1);
-            int c = rnd.nextInt(maxVal + 1);
-            int d = rnd.nextInt(maxVal + 1);
+            long maxVal = lcgNext() % 10 < 7 ? 255 : 999;
+            long a = lcgNext() % (maxVal + 1);
+            long b = lcgNext() % (maxVal + 1);
+            long c = lcgNext() % (maxVal + 1);
+            long d = lcgNext() % (maxVal + 1);
             String s = a + "." + b + "." + c + "." + d;
             if (isValidIp(s)) valid++;
         }

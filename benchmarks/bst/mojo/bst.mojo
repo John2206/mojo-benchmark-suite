@@ -1,28 +1,27 @@
 from std.sys import argv
-from std.random import random_si64, seed
 from std.memory import alloc
 
 
 struct Node:
     comptime NodePointer = UnsafePointer[Self, MutUntrackedOrigin]
 
-    var val: Int
+    var val: Int64
     var left: Optional[Self.NodePointer]
     var right: Optional[Self.NodePointer]
 
-    def __init__(out self, val: Int):
+    def __init__(out self, val: Int64):
         self.val = val
         self.left = None
         self.right = None
 
     @staticmethod
-    def make_node(val: Int) -> Self.NodePointer:
+    def make_node(val: Int64) -> Self.NodePointer:
         var node_ptr = alloc[Self](1)
         node_ptr.unsafe_write(Self(val))
         return node_ptr
 
 
-def insert(root: Node.NodePointer, val: Int):
+def insert(root: Node.NodePointer, val: Int64):
     var cur = root
     while True:
         if val < cur[].val:
@@ -45,15 +44,19 @@ def main() raises:
     if len(args) > 1:
         n = atol(args[1])
 
-    seed(42)
-    var root = Node.make_node(Int(random_si64(0, 2_147_483_647)))
-    for _ in range(1, n):
-        insert(root, Int(random_si64(0, 2_147_483_647)))
+    var state: UInt32 = 42
 
-    var prev = 0
+    var root = Node.make_node(0)
+    state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+    root[].val = Int64(state)
+    for _ in range(1, n):
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        insert(root, Int64(state))
+
+    var prev: Int64 = 0
     var first = True
     var ok = True
-    var max_val = 0
+    var max_val: Int64 = 0
     var count = 0
 
     var stack = List[Node.NodePointer]()

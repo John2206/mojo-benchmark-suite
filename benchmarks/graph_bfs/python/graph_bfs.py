@@ -1,4 +1,3 @@
-import random
 import sys
 
 EDGES_PER_NODE = 4
@@ -7,12 +6,18 @@ EDGES_PER_NODE = 4
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 500_000
 
-    random.seed(42)
+    state = 42
+
+    def lcg_next():
+        nonlocal state
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        return state
+
     adj = [0] * (n * EDGES_PER_NODE)
     for i in range(n):
         adj[i * EDGES_PER_NODE] = (i + 1) % n
         for k in range(1, EDGES_PER_NODE):
-            adj[i * EDGES_PER_NODE + k] = random.randrange(n)
+            adj[i * EDGES_PER_NODE + k] = lcg_next() % n
 
     visited = [False] * n
     queue = [0] * n

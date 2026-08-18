@@ -1,11 +1,14 @@
-import random
 import sys
 
 
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 2_000_000
-    random.seed(42)
-    arr = [random.randint(-(2**31), 2**31 - 1) for _ in range(n)]
+
+    state = 42
+    arr = [0] * n
+    for i in range(n):
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        arr[i] = state
 
     arr.sort()
 

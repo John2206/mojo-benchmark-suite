@@ -2,19 +2,26 @@ use std::env;
 
 const EDGES_PER_NODE: usize = 4;
 
+struct Lcg {
+    state: u32,
+}
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.state = self.state.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fffffff;
+        self.state as u64
+    }
+}
+
 fn main() {
     let n: usize = env::args().nth(1).map(|s| s.parse().unwrap()).unwrap_or(500_000);
 
     let mut adj = vec![0usize; n * EDGES_PER_NODE];
-    let mut state: u64 = 42;
-    let mut next_rand = |bound: usize| -> usize {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        ((state >> 33) as usize) % bound
-    };
+    let mut lcg = Lcg { state: 42 };
     for i in 0..n {
         adj[i * EDGES_PER_NODE] = (i + 1) % n;
         for k in 1..EDGES_PER_NODE {
-            adj[i * EDGES_PER_NODE + k] = next_rand(n);
+            adj[i * EDGES_PER_NODE + k] = (lcg.next() % n as u64) as usize;
         }
     }
 

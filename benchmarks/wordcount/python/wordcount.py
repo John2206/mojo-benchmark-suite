@@ -1,4 +1,3 @@
-import random
 import sys
 
 VOCAB = [
@@ -9,11 +8,17 @@ VOCAB = [
 
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 2_000_000
-    random.seed(42)
+
+    state = 42
+
+    def lcg_next():
+        nonlocal state
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        return state
 
     counts = {}
     for _ in range(n):
-        word = VOCAB[random.randrange(len(VOCAB))]
+        word = VOCAB[lcg_next() % len(VOCAB)]
         counts[word] = counts.get(word, 0) + 1
 
     assert sum(counts.values()) == n, "self-check failed: counts do not sum to n"

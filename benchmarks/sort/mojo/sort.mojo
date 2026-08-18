@@ -1,4 +1,3 @@
-from std.random import randint, seed
 from std.sys import argv
 
 
@@ -8,9 +7,11 @@ def main() raises:
     if len(args) > 1:
         n = atol(args[1])
 
-    seed(42)
-    var data = List(length=n, fill=Int32(0))
-    randint(data, -1_000_000_000, 1_000_000_000)
+    var state: UInt32 = 42
+    var data = List[Int64](length=n, fill=Int64(0))
+    for i in range(n):
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        data[i] = Int64(state)
 
     sort(data)
 

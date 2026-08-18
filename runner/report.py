@@ -105,9 +105,16 @@ def render_summary_table(entry: dict) -> str:
 
 
 def leaderboard_scores(data: list[dict]) -> list[tuple[str, float, int]]:
-    """[(language, geomean speedup vs fastest, benchmarks scored), ...] sorted descending by score."""
+    """[(language, geomean speedup vs fastest, benchmarks scored), ...] sorted descending by score.
+
+    Benchmarks whose cross-language outputs failed verification (entry["verified"]
+    is False, e.g. an OUTPUT MISMATCH or an explicit skip policy) are excluded --
+    an unverified result cannot win the leaderboard.
+    """
     lang_ratios: dict[str, list[float]] = defaultdict(list)
     for entry in data:
+        if entry.get("verified") is False:
+            continue
         rows = [r for r in entry["results"] if r.get("min") is not None]
         if not rows:
             continue
@@ -172,11 +179,25 @@ def render_leaderboard_svg(data: list[dict], title: str = "") -> str:
     )
 
 
+def render_verify_note(entry: dict) -> str:
+    if "verified" not in entry:
+        return ""
+    if entry["verified"]:
+        return ""
+    reason = entry.get("verify_reason", "unknown reason")
+    if reason.startswith("skipped:"):
+        return f'<p class="verify-note">⚠ output verification skipped — {reason[len("skipped:"):].strip()}</p>'
+    outputs = "; ".join(f"{lang}={value}" for lang, value in sorted(entry.get("_verify_outputs", {}).items()))
+    detail = f" ({outputs})" if outputs else ""
+    return f'<p class="verify-note mismatch">⚠ OUTPUT MISMATCH — {reason}{detail} — excluded from leaderboard</p>'
+
+
 def render_html(data: list[dict]) -> str:
     sections = []
     for entry in data:
         sections.append(
             f'<h2>{entry["benchmark"]} <small>(size={entry["size"]})</small></h2>\n'
+            f'{render_verify_note(entry)}\n'
             f'{render_summary_table(entry)}\n'
             f'<h3>time</h3>\n{render_chart(entry, "min", ".4f", "s")}\n'
             f'<h3>peak RSS</h3>\n{render_chart(entry, "peak_rss_mb", ".1f", "MB")}'
@@ -196,6 +217,8 @@ table.summary {{ border-collapse: collapse; margin: 0.5rem 0 1.5rem; font-size: 
 table.summary th, table.summary td {{ padding: 4px 10px; border: 1px solid #ddd; }}
 table.summary td:not(:first-child) {{ text-align: right; }}
 table.summary em {{ color: #b8860b; font-style: normal; }}
+.verify-note {{ color: #b8860b; font-size: 13px; }}
+.verify-note.mismatch {{ color: #c0392b; font-weight: bold; }}
 </style>
 </head>
 <body>

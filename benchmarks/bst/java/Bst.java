@@ -1,5 +1,3 @@
-import java.util.Random;
-
 public class Bst {
     static class Node {
         long val;
@@ -25,6 +23,12 @@ public class Bst {
     static boolean ok = true;
     static long maxVal;
     static long count = 0;
+    static int lcgState;
+
+    static long lcgNext() {
+        lcgState = (lcgState * 1103515245 + 12345) & 0x7fffffff;
+        return lcgState;
+    }
 
     static void inorder(Node node) {
         if (node == null) return;
@@ -40,10 +44,10 @@ public class Bst {
     public static void main(String[] args) {
         long n = args.length > 0 ? Long.parseLong(args[0]) : 300_000;
 
-        Random rnd = new Random(42);
-        Node root = new Node(rnd.nextLong() & Long.MAX_VALUE);
+        lcgState = 42;
+        Node root = new Node(lcgNext());
         for (long i = 1; i < n; i++) {
-            insert(root, rnd.nextLong() & Long.MAX_VALUE);
+            insert(root, lcgNext());
         }
 
         inorder(root);

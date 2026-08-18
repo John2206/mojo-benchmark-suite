@@ -1,5 +1,4 @@
 from std.sys import argv
-from std.random import random_si64, seed
 
 comptime EDGES_PER_NODE = 4
 
@@ -11,11 +10,12 @@ def main() raises:
         n = atol(args[1])
 
     var adj = List[Int](length=n * EDGES_PER_NODE, fill=0)
-    seed(42)
+    var state: UInt32 = 42
     for i in range(n):
         adj[i * EDGES_PER_NODE] = (i + 1) % n
         for k in range(1, EDGES_PER_NODE):
-            adj[i * EDGES_PER_NODE + k] = Int(random_si64(0, Int64(n - 1)))
+            state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+            adj[i * EDGES_PER_NODE + k] = Int(state) % n
 
     var visited = List[Bool](length=n, fill=False)
     var queue = List[Int](length=n, fill=0)

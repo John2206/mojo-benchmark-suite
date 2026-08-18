@@ -1,5 +1,16 @@
 use std::env;
 
+struct Lcg {
+    state: u32,
+}
+
+impl Lcg {
+    fn next(&mut self) -> u32 {
+        self.state = self.state.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fffffff;
+        self.state
+    }
+}
+
 fn parse_group(s: &str) -> Option<u32> {
     if s.is_empty() || s.len() > 3 || !s.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -24,19 +35,15 @@ fn main() {
     assert!(!is_valid_ip("999.1.1.1"), "self-check failed: known-invalid IP accepted");
     assert!(!is_valid_ip("1.2.3"), "self-check failed: known-invalid IP accepted");
 
-    let mut state: u64 = 42;
-    let mut next = || {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        (state >> 33) as u32
-    };
+    let mut lcg = Lcg { state: 42 };
 
     let mut valid: u64 = 0;
     for _ in 0..n {
-        let max_val = if next() % 10 < 7 { 255 } else { 999 };
-        let a = next() % (max_val + 1);
-        let b = next() % (max_val + 1);
-        let c = next() % (max_val + 1);
-        let d = next() % (max_val + 1);
+        let max_val = if lcg.next() % 10 < 7 { 255 } else { 999 };
+        let a = lcg.next() % (max_val + 1);
+        let b = lcg.next() % (max_val + 1);
+        let c = lcg.next() % (max_val + 1);
+        let d = lcg.next() % (max_val + 1);
         let s = format!("{}.{}.{}.{}", a, b, c, d);
         if is_valid_ip(&s) {
             valid += 1;

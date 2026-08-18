@@ -3,15 +3,22 @@
 
 #define EDGES_PER_NODE 4
 
+static unsigned int lcg_state;
+
+static long lcg_next(void) {
+    lcg_state = (lcg_state * 1103515245u + 12345u) & 0x7fffffffu;
+    return (long)lcg_state;
+}
+
 int main(int argc, char **argv) {
     long n = argc > 1 ? atol(argv[1]) : 500000;
 
     int *adj = malloc((size_t)n * EDGES_PER_NODE * sizeof(int));
-    srand(42);
+    lcg_state = 42;
     for (long i = 0; i < n; i++) {
         adj[i * EDGES_PER_NODE] = (int)((i + 1) % n);
         for (int k = 1; k < EDGES_PER_NODE; k++) {
-            adj[i * EDGES_PER_NODE + k] = rand() % n;
+            adj[i * EDGES_PER_NODE + k] = (int)(lcg_next() % n);
         }
     }
 

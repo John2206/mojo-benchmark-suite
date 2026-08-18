@@ -1,5 +1,4 @@
 from std.sys import argv
-from std.random import random_si64, seed
 
 
 def parse_group(g: StringSlice) raises -> Int:
@@ -38,15 +37,20 @@ def main() raises:
     if is_valid_ip("1.2.3"):
         raise Error("self-check failed: known-invalid IP accepted")
 
-    seed(42)
+    var state: UInt32 = 42
+
     var valid = 0
     for _ in range(n):
-        var use_wide = random_si64(0, 9) >= 7
-        var max_val: Int64 = 999 if use_wide else 255
-        var a = random_si64(0, max_val)
-        var b = random_si64(0, max_val)
-        var c = random_si64(0, max_val)
-        var d = random_si64(0, max_val)
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        var max_val: UInt32 = 255 if state % 10 < 7 else 999
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        var a = state % (max_val + 1)
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        var b = state % (max_val + 1)
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        var c = state % (max_val + 1)
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        var d = state % (max_val + 1)
         var s = String(a) + "." + String(b) + "." + String(c) + "." + String(d)
         if is_valid_ip(s):
             valid += 1

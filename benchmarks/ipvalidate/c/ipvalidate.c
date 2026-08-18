@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+static unsigned int lcg_state;
+
+static long lcg_next(void) {
+    lcg_state = (lcg_state * 1103515245u + 12345u) & 0x7fffffffu;
+    return (long)lcg_state;
+}
+
 int parse_group(const char *s, int len) {
     if (len < 1 || len > 3) return -1;
     int val = 0;
@@ -45,15 +52,15 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    srand(42);
+    lcg_state = 42;
     long valid = 0;
     char buf[32];
     for (long i = 0; i < n; i++) {
-        int max_val = (rand() % 10 < 7) ? 255 : 999;
-        int a = rand() % (max_val + 1);
-        int b = rand() % (max_val + 1);
-        int c = rand() % (max_val + 1);
-        int d = rand() % (max_val + 1);
+        int max_val = (lcg_next() % 10 < 7) ? 255 : 999;
+        int a = (int)(lcg_next() % (max_val + 1));
+        int b = (int)(lcg_next() % (max_val + 1));
+        int c = (int)(lcg_next() % (max_val + 1));
+        int d = (int)(lcg_next() % (max_val + 1));
         snprintf(buf, sizeof(buf), "%d.%d.%d.%d", a, b, c, d);
         if (is_valid_ip(buf)) valid++;
     }

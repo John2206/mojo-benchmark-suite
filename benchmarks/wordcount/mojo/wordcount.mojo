@@ -1,5 +1,4 @@
 from std.sys import argv
-from std.random import random_si64, seed
 
 
 def main() raises:
@@ -13,10 +12,11 @@ def main() raises:
         "he", "was", "for", "on", "are", "as", "with", "his", "they", "at",
     ]
 
-    seed(42)
+    var state: UInt32 = 42
     var counts = Dict[String, Int]()
     for _ in range(n):
-        var idx = Int(random_si64(0, Int64(len(vocab) - 1)))
+        state = (state * UInt32(1103515245) + UInt32(12345)) & UInt32(0x7FFFFFFF)
+        var idx = Int(state) % len(vocab)
         var word = vocab[idx]
         counts[word] = counts.get(word, 0) + 1
 

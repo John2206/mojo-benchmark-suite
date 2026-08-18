@@ -42,18 +42,24 @@ impl Node {
     }
 }
 
+struct Lcg {
+    state: u32,
+}
+
+impl Lcg {
+    fn next(&mut self) -> i64 {
+        self.state = self.state.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fffffff;
+        self.state as i64
+    }
+}
+
 fn main() {
     let n: i64 = env::args().nth(1).map(|s| s.parse().unwrap()).unwrap_or(300_000);
 
-    let mut state: u64 = 42;
-    let mut next_rand = || -> i64 {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        (state >> 33) as i64
-    };
-
-    let mut root = Node::new(next_rand());
+    let mut lcg = Lcg { state: 42 };
+    let mut root = Node::new(lcg.next());
     for _ in 1..n {
-        let v = next_rand();
+        let v = lcg.next();
         root.insert(v);
     }
 

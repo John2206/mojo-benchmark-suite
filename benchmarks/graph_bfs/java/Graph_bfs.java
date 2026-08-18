@@ -1,17 +1,21 @@
-import java.util.Random;
-
 public class Graph_bfs {
     static final int EDGES_PER_NODE = 4;
+    static int lcgState;
+
+    static long lcgNext() {
+        lcgState = (lcgState * 1103515245 + 12345) & 0x7fffffff;
+        return lcgState;
+    }
 
     public static void main(String[] args) {
         int n = args.length > 0 ? Integer.parseInt(args[0]) : 500_000;
 
         int[] adj = new int[n * EDGES_PER_NODE];
-        Random rnd = new Random(42);
+        lcgState = 42;
         for (int i = 0; i < n; i++) {
             adj[i * EDGES_PER_NODE] = (i + 1) % n;
             for (int k = 1; k < EDGES_PER_NODE; k++) {
-                adj[i * EDGES_PER_NODE + k] = rnd.nextInt(n);
+                adj[i * EDGES_PER_NODE + k] = (int) (lcgNext() % n);
             }
         }
 

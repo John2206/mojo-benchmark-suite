@@ -1,4 +1,3 @@
-import random
 import sys
 
 
@@ -29,10 +28,16 @@ def insert(root, val):
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 300_000
 
-    random.seed(42)
-    root = Node(random.getrandbits(31))
+    state = 42
+
+    def lcg_next():
+        nonlocal state
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        return state
+
+    root = Node(lcg_next())
     for _ in range(n - 1):
-        insert(root, random.getrandbits(31))
+        insert(root, lcg_next())
 
     prev = None
     ok = True
