@@ -38,7 +38,7 @@ def main():
     expected = float(cp.sum((k % 13).astype(cp.float64) * (k % 17).astype(cp.float64)))
     assert float(c[0, 0]) == expected, "self-check failed: c[0][0] mismatch"
 
-    print(float(c[n - 1, n - 1]))
+    print(f"{float(c[n - 1, n - 1]):.2f}")
 
 
 if __name__ == "__main__":

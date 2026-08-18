@@ -1,6 +1,19 @@
 from std.sys import argv
+from std.math import abs
 
 comptime BLOCK = 32
+
+
+def format2(value: Float64) -> String:
+    """Matches C's "%.2f" so all five languages print the same bytes."""
+    var sign = "-" if value < 0.0 else ""
+    var scaled = Int(abs(value) * 100.0 + 0.5)
+    var whole = scaled // 100
+    var frac = scaled % 100
+    var frac_str = String(frac)
+    while frac_str.byte_length() < 2:
+        frac_str = "0" + frac_str
+    return sign + String(whole) + "." + frac_str
 
 
 def main() raises:
@@ -47,4 +60,4 @@ def main() raises:
     if c[0] != expected:
         raise Error("self-check failed: c[0][0] mismatch")
 
-    print(c[(n - 1) * n + (n - 1)])
+    print(format2(c[(n - 1) * n + (n - 1)]))

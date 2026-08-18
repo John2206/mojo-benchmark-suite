@@ -1,10 +1,22 @@
-from std.math import ceildiv
+from std.math import abs, ceildiv
 from std.sys import argv, has_accelerator
 from max.gpu.host import DeviceContext
 from std.gpu import global_idx
 from layout import TileTensor, TensorLayout, row_major
 
 comptime BLOCK = 16
+
+
+def format2(value: Float64) -> String:
+    """Matches C's "%.2f" so all five languages print the same bytes."""
+    var sign = "-" if value < 0.0 else ""
+    var scaled = Int(abs(value) * 100.0 + 0.5)
+    var whole = scaled // 100
+    var frac = scaled % 100
+    var frac_str = String(frac)
+    while frac_str.byte_length() < 2:
+        frac_str = "0" + frac_str
+    return sign + String(whole) + "." + frac_str
 
 
 def matmul_kernel[LT: TensorLayout](
@@ -69,4 +81,4 @@ def main() raises:
         var c_host = TileTensor(mapped_c, layout)
         if Float64(c_host[0, 0]) != expected:
             raise Error("self-check failed: c[0][0] mismatch")
-        print(Float64(c_host[n - 1, n - 1]))
+        print(format2(Float64(c_host[n - 1, n - 1])))
