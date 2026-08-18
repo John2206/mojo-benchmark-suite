@@ -190,6 +190,32 @@ def compute_startup_baselines(bench_keys: list[str], repeats: int) -> dict[str, 
     return baselines
 
 
+def size_ladder(bench_key: str) -> list[int]:
+    """The size ladder for a --sweep run of this benchmark: an explicit
+    per-benchmark "sizes" override if declared (e.g. fib, which is
+    exponential so a linear/geometric ladder derived from default_size would
+    either be trivial or explode), else a geometric ladder derived from
+    default_size: [d//8, d//4, d//2, d]."""
+    info = BENCHMARKS[bench_key]
+    if "sizes" in info:
+        return list(info["sizes"])
+    d = info["default_size"]
+    ladder = sorted({max(1, d // 8), max(1, d // 4), max(1, d // 2), d})
+    return ladder
+
+
+def run_sweep(bench_key: str, repeats: int, baselines: dict[str, dict[str, float]]) -> dict:
+    """Runs one benchmark across its whole size ladder. Verification (phase 1)
+    runs at *every* size -- a self-check or cross-language agreement that only
+    holds at one size is exactly the bug class this is meant to catch."""
+    baseline_key = BENCHMARKS[bench_key].get("baseline", "noop")
+    by_size = []
+    for size in size_ladder(bench_key):
+        entry = run_benchmark(bench_key, size, repeats, baselines.get(baseline_key))
+        by_size.append(entry)
+    return {"benchmark": bench_key, "by_size": by_size}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--benchmark", choices=[*BENCHMARKS, "all"], default="all")
@@ -197,22 +223,38 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--json", action="store_true", help="dump results to results/<timestamp>.json")
     parser.add_argument("--no-baseline", action="store_true", help="skip the noop/noop_gpu startup baseline runs (no 'compute' column)")
+    parser.add_argument("--sweep", action="store_true", help="run each benchmark across a size ladder instead of one size (see size_ladder())")
     args = parser.parse_args()
 
     if args.size is not None and args.benchmark == "all":
         parser.error("--size requires a specific --benchmark (sizes aren't comparable across benchmarks)")
+    if args.sweep and args.size is not None:
+        parser.error("--sweep derives its own size ladder; --size doesn't apply")
 
-    bench_keys = list(BENCHMARKS) if args.benchmark == "all" else [args.benchmark]
+    if args.benchmark == "all":
+        # noop/noop_gpu are startup-cost baselines, not benchmarks in their
+        # own right -- they're covered by compute_startup_baselines() below,
+        # not run again here.
+        bench_keys = [k for k in BENCHMARKS if k not in ("noop", "noop_gpu")]
+    else:
+        bench_keys = [args.benchmark]
 
     baselines: dict[str, dict[str, float]] = {}
     if not args.no_baseline:
         baselines = compute_startup_baselines(bench_keys, args.repeats)
 
+    if args.sweep:
+        sweeps = [run_sweep(bench_key, args.repeats, baselines) for bench_key in bench_keys]
+        if args.json:
+            RESULTS_DIR.mkdir(exist_ok=True)
+            out_path = RESULTS_DIR / f"sweep-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+            payload = {"env": capture_env(), "startup_s": baselines, "sweeps": sweeps}
+            out_path.write_text(json.dumps(payload, indent=2))
+            print(f"\nWrote {out_path.relative_to(ROOT)}")
+        return
+
     all_results = []
     for bench_key in bench_keys:
-        if bench_key in ("noop", "noop_gpu") and bench_key in baselines:
-            # Already run as part of the baseline pass -- don't run it twice.
-            continue
         size = args.size if args.size is not None else BENCHMARKS[bench_key]["default_size"]
         baseline_key = BENCHMARKS[bench_key].get("baseline", "noop")
         all_results.append(run_benchmark(bench_key, size, args.repeats, baselines.get(baseline_key)))

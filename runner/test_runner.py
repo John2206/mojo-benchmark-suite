@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import json
+import random
 import tempfile
 from pathlib import Path
 
 import resultsio
+import scaling
 import verify
 
 
@@ -86,6 +88,31 @@ def test_resultsio_new_format():
         assert env == {"gcc": "13.3.0"}, env
         assert len(entries) == 1
         assert entries[0]["benchmark"] == "fib"
+
+
+def test_scaling_exact_quadratic():
+    sizes = [10, 20, 40, 80, 160]
+    times = [0.001 * (s ** 2) for s in sizes]
+    fit = scaling.fit_complexity(sizes, times)
+    assert abs(fit["slope"] - 2.0) < 0.01, fit
+    assert fit["r_squared"] > 0.999, fit
+
+
+def test_scaling_noisy_data():
+    random.seed(0)
+    sizes = [10, 20, 40, 80, 160]
+    times = [0.001 * random.uniform(0.5, 50) for _ in sizes]
+    fit = scaling.fit_complexity(sizes, times)
+    assert fit["r_squared"] < 0.8, fit
+
+
+def test_scaling_crossover_bracket():
+    sizes = [10, 20, 40, 80, 160]
+    times_a = [1, 2, 4, 8, 30]        # a: accelerating, overtakes b once
+    times_b = [5, 6, 7, 9, 10]        # b: nearly flat
+    crossings = scaling.find_crossovers(sizes, times_a, times_b)
+    assert len(crossings) == 1, crossings
+    assert crossings[0]["bracket"] == [80, 160], crossings
 
 
 def main():

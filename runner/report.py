@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from collections import defaultdict
 from pathlib import Path
 
 import resultsio
+import scaling
 import stats
 from languages import ROOT
 
@@ -292,13 +294,181 @@ def export_csv(data: list[dict], path: Path) -> None:
                 ])
 
 
+def render_scaling_chart(bench: str, times_by_lang: dict[str, list[tuple[float, float]]], title: str = "") -> str:
+    """Log-log line chart: x=size, y=min time, one polyline per language.
+    times_by_lang: {language: [(size, time), ...]} sorted by size, time in
+    the metric already chosen by the caller (wall-clock or compute)."""
+    all_points = [p for pts in times_by_lang.values() for p in pts]
+    if len(all_points) < 2:
+        return "<p><em>no data</em></p>"
+
+    xs = [math.log(s) for s, _ in all_points if s > 0]
+    ys = [math.log(t) for _, t in all_points if t > 0]
+    if not xs or not ys:
+        return "<p><em>no positive data to plot on a log-log axis</em></p>"
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    x_span = (x_max - x_min) or 1.0
+    y_span = (y_max - y_min) or 1.0
+
+    pad = 16
+    title_h = 24 if title else 0
+    plot_w, plot_h = CHART_WIDTH, 260
+    left = pad + 50
+    top = pad + title_h
+
+    def px(size: float) -> float:
+        return left + (math.log(size) - x_min) / x_span * plot_w
+
+    def py(t: float) -> float:
+        return top + plot_h - (math.log(t) - y_min) / y_span * plot_h
+
+    parts = []
+    if title:
+        parts.append(f'<text x="{pad}" y="{pad + 12}" font-size="14" font-weight="bold" fill="#222">{title}</text>')
+    parts.append(f'<rect x="{left}" y="{top}" width="{plot_w}" height="{plot_h}" fill="none" stroke="#ddd" />')
+
+    legend_y = top + plot_h + 20
+    for i, (lang, points) in enumerate(sorted(times_by_lang.items())):
+        pts = [(s, t) for s, t in points if s > 0 and t > 0]
+        if not pts:
+            continue
+        color = COLORS.get(lang, DEFAULT_COLOR)
+        poly = " ".join(f"{px(s):.1f},{py(t):.1f}" for s, t in pts)
+        parts.append(f'<polyline points="{poly}" fill="none" stroke="{color}" stroke-width="2" />')
+        for s, t in pts:
+            parts.append(f'<circle cx="{px(s):.1f}" cy="{py(t):.1f}" r="2.5" fill="{color}" />')
+        lx = left + i * 90
+        parts.append(f'<rect x="{lx}" y="{legend_y}" width="10" height="10" fill="{color}" />')
+        parts.append(f'<text x="{lx + 14}" y="{legend_y + 9}" font-size="12" fill="#333">{lang}</text>')
+
+    width = left + plot_w + pad * 2
+    height = legend_y + 24
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">'
+        f'<rect width="100%" height="100%" fill="white" stroke="#ddd" />'
+        f"{''.join(parts)}</svg>"
+    )
+
+
+def sweep_times_by_lang(sweep: dict, metric: str = "min") -> dict[str, list[tuple[float, float]]]:
+    """{language: [(size, metric_value), ...]} sorted by size, from one
+    sweeps[] entry ({"benchmark": ..., "by_size": [entry, entry, ...]})."""
+    by_lang: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    for entry in sweep["by_size"]:
+        size = entry["size"]
+        for row in entry["results"]:
+            value = row.get(metric)
+            if value is not None:
+                by_lang[row["language"]].append((size, value))
+    for lang in by_lang:
+        by_lang[lang].sort(key=lambda p: p[0])
+    return dict(by_lang)
+
+
+def render_complexity_table(sweep: dict, metric: str = "min") -> str:
+    by_lang = sweep_times_by_lang(sweep, metric=metric)
+    lines = [
+        '<table class="summary">',
+        "<tr><th>Language</th><th>empirical exponent (slope)</th><th>R&sup2;</th><th>points</th></tr>",
+    ]
+    for lang, points in sorted(by_lang.items()):
+        sizes = [s for s, _ in points]
+        times = [t for _, t in points]
+        fit = scaling.fit_complexity(sizes, times)
+        slope_str = f"{fit['slope']:.2f}" if fit["slope"] is not None else "n/a"
+        r2_str = f"{fit['r_squared']:.3f}" if fit["r_squared"] is not None else "n/a"
+        low_confidence = " <em>(low confidence)</em>" if fit["r_squared"] is not None and fit["r_squared"] < 0.9 else ""
+        lines.append(f"<tr><td>{lang}</td><td>{slope_str}</td><td>{r2_str}{low_confidence}</td><td>{fit['n']}</td></tr>")
+    lines.append("</table>")
+    return "\n".join(lines)
+
+
+def render_crossovers(sweep: dict, metric: str = "min") -> str:
+    by_lang = sweep_times_by_lang(sweep, metric=metric)
+    if len(by_lang) < 2:
+        return ""
+    sizes = sorted({s for points in by_lang.values() for s, _ in points})
+    times_by_lang = {lang: [dict(points).get(s) for s in sizes] for lang, points in by_lang.items()}
+    crossings = scaling.all_crossovers(sizes, times_by_lang)
+    if not crossings:
+        return "<p><em>no crossovers in this size range — the faster language stays faster throughout</em></p>"
+    lines = ["<ul>"]
+    for (lang_a, lang_b), brackets in sorted(crossings.items()):
+        for c in brackets:
+            faster_before = lang_a if c["before"] == "a" else lang_b
+            faster_after = lang_a if c["after"] == "a" else lang_b
+            lines.append(
+                f"<li>{lang_a} vs {lang_b}: {faster_before} faster below size {c['bracket'][0]}, "
+                f"{faster_after} faster above size {c['bracket'][1]} "
+                f"(crossover between {c['bracket'][0]} and {c['bracket'][1]})</li>"
+            )
+    lines.append("</ul>")
+    return "\n".join(lines)
+
+
+def render_sweep_html(sweeps: list[dict]) -> str:
+    sections = []
+    for sweep in sweeps:
+        bench = sweep["benchmark"]
+        sections.append(
+            f'<h2>{bench}</h2>\n'
+            f'<h3>time vs size (log-log)</h3>\n{render_scaling_chart(bench, sweep_times_by_lang(sweep, "min"), title=f"{bench} — wall-clock")}\n'
+            f'<h3>compute vs size (log-log)</h3>\n{render_scaling_chart(bench, sweep_times_by_lang(sweep, "compute"), title=f"{bench} — compute")}\n'
+            f'<h3>empirical complexity (wall-clock)</h3>\n{render_complexity_table(sweep, "min")}\n'
+            f'<h3>crossovers (wall-clock)</h3>\n{render_crossovers(sweep, "min")}'
+        )
+    body = "\n".join(sections)
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scaling sweep results</title>
+<style>
+body {{ font-family: sans-serif; max-width: 800px; margin: 2rem auto; }}
+h2 {{ margin-top: 2.5rem; }}
+table.summary {{ border-collapse: collapse; margin: 0.5rem 0 1.5rem; font-size: 13px; }}
+table.summary th, table.summary td {{ padding: 4px 10px; border: 1px solid #ddd; }}
+table.summary td:not(:first-child) {{ text-align: right; }}
+table.summary em {{ color: #b8860b; font-style: normal; }}
+</style>
+</head>
+<body>
+<h1>Scaling sweep results</h1>
+{body}
+</body>
+</html>
+"""
+
+
+def export_scaling_svgs(sweeps: list[dict], export_dir: Path) -> None:
+    export_dir.mkdir(parents=True, exist_ok=True)
+    for sweep in sweeps:
+        bench = sweep["benchmark"]
+        path = export_dir / f"{bench}-scaling.svg"
+        path.write_text(render_scaling_chart(bench, sweep_times_by_lang(sweep, "min"), title=f"{bench} — time vs size (log-log)"))
+        print(f"Wrote {path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("results_file", nargs="?", default=None)
     parser.add_argument("-o", "--output", default="report.html")
     parser.add_argument("--export-dir", default=None, help="write standalone <benchmark>-time.svg / -rss.svg files here instead of an HTML report")
     parser.add_argument("--csv", default=None, help="write a flat CSV of every benchmark/language stat to this path instead of an HTML report")
+    parser.add_argument("--sweep", action="store_true", help="render a results/sweep-*.json file (scaling charts + complexity fit + crossovers) instead of a single-size run")
     args = parser.parse_args()
+
+    if args.sweep:
+        path = Path(args.results_file).resolve() if args.results_file else resultsio.latest_sweep_file()
+        _env, _startup_s, sweeps = resultsio.load_sweep(path)
+        if args.export_dir:
+            export_scaling_svgs(sweeps, Path(args.export_dir))
+            return
+        out_path = ROOT / args.output
+        out_path.write_text(render_sweep_html(sweeps))
+        print(f"Wrote {out_path.resolve()} from {path}")
+        return
 
     path = Path(args.results_file).resolve() if args.results_file else resultsio.latest_results_file()
     _env, data = resultsio.load_results(path)

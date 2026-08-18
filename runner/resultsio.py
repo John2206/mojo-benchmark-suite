@@ -23,8 +23,22 @@ def load_results(path: Path) -> tuple[dict, list[dict]]:
     return data.get("env", {}), data.get("benchmarks", [])
 
 
+def load_sweep(path: Path) -> tuple[dict, dict, list[dict]]:
+    """(env, startup_s, sweeps) from a `run.py --sweep --json` file, i.e.
+    {"env": {...}, "startup_s": {...}, "sweeps": [{"benchmark": ..., "by_size": [...]}]}."""
+    data = json.loads(Path(path).read_text())
+    return data.get("env", {}), data.get("startup_s", {}), data.get("sweeps", [])
+
+
 def latest_results_file() -> Path:
-    files = sorted(RESULTS_DIR.glob("*.json"))
+    files = sorted(p for p in RESULTS_DIR.glob("*.json") if not p.name.startswith("sweep-"))
     if not files:
         sys.exit("No results/*.json files found — run with --json first.")
+    return files[-1]
+
+
+def latest_sweep_file() -> Path:
+    files = sorted(RESULTS_DIR.glob("sweep-*.json"))
+    if not files:
+        sys.exit("No results/sweep-*.json files found — run with --sweep --json first.")
     return files[-1]

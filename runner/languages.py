@@ -115,7 +115,7 @@ LANGUAGES = {
 }
 
 BENCHMARKS = {
-    "fib": {"folder": "fibonacci", "stem": "fib", "default_size": 32},
+    "fib": {"folder": "fibonacci", "stem": "fib", "default_size": 32, "sizes": [24, 26, 28, 30, 32]},
     "sort": {"folder": "sort", "stem": "sort", "default_size": 2_000_000},
     "matmul": {"folder": "matmul", "stem": "matmul", "default_size": 400, "verify": {"rel_tol": 1e-6}},
     "mandelbrot": {"folder": "mandelbrot", "stem": "mandelbrot", "default_size": 800, "verify": {"skip": "escape-time iteration counts at boundary pixels are sensitive to tiny floating-point differences in Mojo's codegen vs C/Rust/Java/Python's (observed: 107581 vs Mojo's 107582 out of 640000 pixels at size=800, 1 pixel / 0.0009%) -- not a meaningful cross-language comparison"}},
