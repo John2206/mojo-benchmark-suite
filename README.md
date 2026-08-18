@@ -3,24 +3,31 @@
 Cross-language benchmark suite comparing **Mojo**, **C**, **Rust**, **Java**,
 and **Python** on twenty-six workloads — from tight numeric loops to hash maps,
 threading, trees/graphs, hand-rolled SIMD/JSON parsing, and a native GPU
-kernel. One CLI runner builds, times, and self-checks every language's
-implementation of every benchmark, and reports wall-clock time *and* peak
-memory.
+kernel. One CLI runner builds, times, self-checks, and **cross-verifies**
+every language's implementation of every benchmark, reporting wall-clock
+time, startup-adjusted compute time, and peak memory — plus a scaling sweep
+that shows how each language's standing changes as the problem grows.
 
 This is a personal project for exploring where Mojo actually wins, where it
 doesn't (yet), and how it compares to the languages people already reach for.
 
 ## Results at a glance
 
-<img src="docs/results/leaderboard.svg" alt="cross-language leaderboard" width="380">
+<img src="docs/results/leaderboard.svg" alt="cross-language leaderboard, wall-clock" width="380"><img src="docs/results/leaderboard-compute.svg" alt="cross-language leaderboard, startup-adjusted compute time" width="380">
 
 <img src="docs/results/mandelbrot-time.svg" alt="mandelbrot time comparison" width="380"><img src="docs/results/allocchurn-rss.svg" alt="allocchurn peak RSS comparison" width="380">
 <img src="docs/results/sort-time.svg" alt="sort time comparison" width="380">
 
-The leaderboard ranks each language by geometric-mean speedup versus the
-fastest language on each benchmark it implements; the number in parentheses
-is how many of the 26 benchmarks that language was scored on (not every
-language implements every benchmark — see `primes_parallel` below).
+Two leaderboards, both ranking each language by geometric-mean speedup versus
+the fastest language on each benchmark it implements. The left one uses
+wall-clock time; the right subtracts each language's own process-startup cost
+first (see
+[Wall-clock vs compute](#wall-clock-vs-compute-separating-startup-cost)).
+The number in parentheses is how many benchmarks that language was scored on
+— not every language implements every benchmark (see `primes_parallel`
+below), and the 4 benchmarks that can't be cross-verified are excluded from
+both (see
+[Verification](#verification-two-independent-layers)).
 
 Full numbers for every benchmark: [`docs/results/reference-run.json`](docs/results/reference-run.json).
 Regenerate these charts yourself with `python3 runner/run.py --benchmark all --json`
@@ -94,14 +101,22 @@ python3 runner/run.py --benchmark fib --size 30 --repeats 3
 ```
 
 ```
+--- computing startup baseline: noop ---
+  ...
 === fib (size=30) ===
-  Language      min (s)   median (s)  peak RSS (MB)
-  C              0.0063       0.0068            1.5
-  Rust           0.0080       0.0084            1.8
-  Mojo           0.0287       0.0301            9.2
-  Java           0.1163       0.1201           42.0
-  Python         0.1370       0.1390            9.3
+  Language      min (s)   median (s)  compute (s)  peak RSS (MB)
+  C              0.0033       0.0035       0.0019            1.5
+  Rust           0.0039       0.0040       0.0025            2.0
+  Mojo           0.0151       0.0158       0.0037            9.2
+  Java           0.0379       0.0417          n/a           42.6
+  Python         0.0659       0.0693       0.0567            9.3
 ```
+
+`compute` is `min` minus that language's own startup cost, measured by the
+`noop` baseline the runner ran first. Java's cell reads `n/a` because at
+`n=30` the whole program finishes faster than a bare JVM launch, so there's
+nothing left to attribute to the recursion. Pass `--no-baseline` to skip the
+baseline runs and drop the column.
 
 ## Usage
 
@@ -118,36 +133,199 @@ python3 runner/run.py --repeats 10 --json      # more samples per language, dump
 | `--size N` | override the default problem size (only valid with a single `--benchmark` — sizes aren't comparable across benchmarks) |
 | `--repeats N` | how many times to run each language (default 5); the table reports min and median |
 | `--json` | write the full results, including every individual run, to `results/<UTC timestamp>.json` |
+| `--sweep` | run each benchmark across a size ladder instead of one size, writing `results/sweep-<UTC timestamp>.json` |
+| `--no-baseline` | skip the `noop`/`noop_gpu` startup runs (no `compute` column) |
 
 Sample real output (`sort`, `mandelbrot` — see [Results at a glance](#results-at-a-glance)
 and `docs/results/reference-run.json` for the full 26-benchmark picture):
 
 ```
 === sort (size=2000000) ===
-  Language      min (s)  peak RSS (MB)
-  Rust           0.0976           24.7
-  Mojo           0.2792           16.8
-  Java           0.3913           53.9
-  C              0.4162           16.3
-  Python         2.3447           97.6
+  Language      min (s)   median (s)  compute (s)  peak RSS (MB)
+  Rust           0.0468       0.0532       0.0455           24.6
+  Mojo           0.1213       0.1322       0.1096           24.4
+  Java           0.1853       0.1955       0.1478           61.4
+  C              0.1900       0.1911       0.1887           31.8
+  Python         0.7134       0.7223       0.7054           97.2
 
 === mandelbrot (size=800) ===
-  Language      min (s)  peak RSS (MB)
-  Rust           0.4064            2.0
-  C              0.4075            1.5
-  Mojo           0.4220            9.2
-  Java           0.5282           42.8
-  Python        13.3071            9.2
+  Language      min (s)   median (s)  compute (s)  peak RSS (MB)
+  C              0.1976       0.2018       0.1963            1.5
+  Rust           0.1991       0.2018       0.1977            2.0
+  Mojo           0.2226       0.2720       0.2110            9.4
+  Java           0.2677       0.2710       0.2302           43.1
+  Python         6.6709       6.7469       6.6628            9.4
 ```
 
-### Every benchmark verifies its own output
+`sort` shows why the `compute` column earns its keep: Java looks 4th on
+wall-clock (0.1853s, a hair ahead of C) but its 37.5ms of JVM startup is
+20% of that number. Subtract it and Java's actual sorting work (0.1478s)
+is clearly ahead of C's (0.1887s) rather than tied with it.
 
-Each program checks a deterministic property of its own result (`sort`
-verifies the array is actually sorted, `matmul` spot-checks one cell,
-`nbody` checks momentum conservation, etc.) and exits non-zero with a
-message on `stderr` if it's wrong. The runner treats that as a failure for
-that language rather than reporting a bogus time — a broken implementation
-can't silently win by being fast.
+### Verification: two independent layers
+
+**1. Each program self-checks.** Every implementation checks a deterministic
+property of its own result (`sort` verifies the array is actually sorted,
+`matmul` spot-checks one cell, `nbody` checks momentum conservation, etc.)
+and exits non-zero with a message on `stderr` if it's wrong. The runner
+treats that as a failure for that language rather than reporting a bogus
+time.
+
+**2. The runner cross-checks all five languages against each other.** A
+self-check only proves an implementation is self-consistent — it cannot
+catch five implementations that are each internally fine but *computing
+different things*. So every program prints exactly one canonical value to
+stdout, and the runner compares that value across languages under a policy
+declared per benchmark in `BENCHMARKS`:
+
+| Policy | Meaning |
+|---|---|
+| `"exact"` (default) | stripped stdout must be byte-identical across every language |
+| `{"rel_tol": T}` | parse as float(s), compare each field against the median |
+| `{"skip": "<reason>"}` | explicitly unverifiable; the reason is **required** and is surfaced in the report, not hidden |
+
+A benchmark whose languages disagree prints `⚠ OUTPUT MISMATCH` with the
+differing values, records `"verified": false`, and **is excluded from the
+leaderboard geomean**. That exclusion is the point: an unverified result
+cannot win. The runner also flags any language whose own output changes
+between repeats of the same size.
+
+Currently **22 of 26 benchmarks verify exactly**, and no benchmark needs
+`rel_tol` — where formatting differed (Mojo printing `19026.0` where C
+prints `19026.00`) the fix went into the source, not the tolerance. The
+4 that can't be verified are documented below rather than quietly dropped.
+
+#### The 4 benchmarks that skip cross-language verification
+
+| Benchmark | Why |
+|---|---|
+| `mandelbrot` | Escape-time iteration counts at boundary pixels are sensitive to tiny floating-point differences in codegen. At the default 800×800: 107581 for C/Rust/Java/Python vs Mojo's 107582 — **1 pixel out of 640,000**. |
+| `mandelbrot_simd` | Same boundary-pixel sensitivity, same 1-pixel disagreement. |
+| `mandelbrot_gpu` | Same again, between Mojo's TileTensor GPU codegen and raw CUDA C double arithmetic. At the default 4096×4096: 2816283 vs Mojo's 2816271 — **12 pixels out of 16,777,216**. |
+| `fft` | Each language's forward-then-inverse reconstruction error converges to its own tiny value (~9.53e-11 for C/Rust/Java/Python, ~9.54e-11 for Mojo) because floating-point associativity differs. Comparing those numbers across languages isn't meaningful. |
+
+These are real properties of the workloads, not bugs — but they mean those
+4 benchmarks are excluded from the leaderboard, so nothing rides on an
+unverified number.
+
+### Wall-clock vs compute: separating startup cost
+
+`fib` at n=32 takes C a few milliseconds and Java tens of milliseconds, but
+nearly all of Java's number is JVM startup, not recursion speed. Ranking on
+wall-clock alone partly ranks process-launch cost.
+
+So the suite measures that cost directly. `benchmarks/noop/` is a program in
+each language that parses argv, prints `0`, and exits; `benchmarks/noop_gpu/`
+does the same after opening a GPU context and allocating/freeing one element.
+Their wall time *is* each language's startup cost. The runner runs the
+relevant baseline first and reports a **`compute`** column = `min − startup`,
+plus a second leaderboard ranked on it.
+
+Measured on the reference machine (Intel Core Ultra 9 185H, 22 cores):
+
+| Language | `noop` startup | `noop_gpu` startup |
+|---|---|---|
+| Rust | 1.3 ms | 204.3 ms |
+| C | 1.3 ms | 242.2 ms |
+| Python | 8.0 ms | 395.7 ms |
+| Mojo | 11.7 ms | 290.1 ms |
+| Java | 37.5 ms | 252.6 ms |
+
+When a benchmark finishes faster than its own startup baseline, the cell
+reads `n/a — below startup baseline` rather than being clamped to zero — a
+silently-zeroed cell would be a lie.
+
+**This is not a cosmetic column — it reorders the leaderboard.** Java and
+Mojo swap places once startup is subtracted:
+
+| Language | wall-clock | compute |
+|---|---|---|
+| Rust | 0.86x | 0.80x |
+| C | 0.77x | 0.75x |
+| **Mojo** | **0.35x (3rd)** | **0.37x (4th)** |
+| **Java** | **0.27x (4th)** | **0.40x (3rd)** |
+| Python | 0.03x | 0.02x |
+
+Java pays ~37.5ms of JVM launch on every single benchmark; Mojo pays ~11.7ms.
+Across the 22 scored benchmarks that fixed tax is most of what separated
+them. On 8 of them Java loses to Mojo on wall-clock and beats it on
+compute — `fft`
+is the tightest case (Java 0.1338s wall vs Mojo's 0.1016s, but 0.0865s
+compute vs Mojo's 0.0894s), and `graph_bfs` the widest (Java 0.0141s compute
+vs Mojo's 0.0401s, despite losing on wall-clock).
+
+Neither leaderboard replaces the other. Wall-clock is what you get running
+the program; compute is what the language does once it's up. The gap between
+them is itself the interesting number — and before this change it was
+invisible.
+
+### Scaling sweep
+
+A single-size snapshot can't answer "does this win hold as N grows."
+
+```sh
+python3 runner/run.py --sweep                    # every benchmark across a size ladder
+python3 runner/run.py --sweep --benchmark sort   # just one
+python3 runner/report.py --sweep                 # log-log charts + complexity fit + crossovers
+```
+
+The default ladder is geometric off each benchmark's `default_size`
+(`[d//8, d//4, d//2, d]`); benchmarks where that's nonsense declare a
+`"sizes"` override (`fib` is exponential, so it uses `[24, 26, 28, 30, 32]`).
+Cross-language verification runs at **every** rung, not just one size —
+that's the exact bug class this README already describes hitting in
+`lru_cache`, where a self-check hardcoded to one size silently passed
+nowhere else.
+
+`runner/scaling.py` then reports:
+
+- **Empirical complexity** — a least-squares fit of `ln(time)` vs `ln(size)`,
+  reporting the slope *and R²*. A bad fit shows up as low confidence instead
+  of producing a confident wrong exponent (`fib` is exponential, not a power
+  law, so its log-log fit correctly reports low confidence).
+- **Crossover brackets** — for each language pair, the adjacent ladder points
+  where the faster language flips. No interpolation; the bracket is the
+  honest answer.
+
+#### What the sweep found
+
+<img src="docs/results/fft-scaling.svg" alt="fft time vs size, log-log, all five languages" width="560">
+
+**Rank inversions are the rule, not the exception.** 14 of the 26 benchmarks
+order the languages differently on wall-clock than on compute at their
+largest size. The dominant pattern is Java climbing once its fixed JVM launch
+is removed — often past Mojo, sometimes past Rust.
+
+**Empirical exponents track theory for C and Rust, and systematically
+understate it for Java.** Fitted on compute time:
+
+| Benchmark | theory | C | Rust | Mojo | Java |
+|---|---|---|---|---|---|
+| `matmul` | n³ | 3.03 (R² 0.98) | 2.15 (R² 1.00) | 2.83 (R² 0.98) | 1.46 (R² 0.58) |
+| `matmul_blocked` | n³ | 2.67 (R² 1.00) | 2.47 (R² 1.00) | 2.86 (R² 0.98) | — |
+| `mandelbrot` | n² | 1.96 (R² 1.00) | 1.95 (R² 1.00) | 1.80 (R² 1.00) | 2.56 (R² 0.99) |
+| `nbody` | n² | 1.57 (R² 0.96) | 1.69 (R² 0.99) | 2.01 (R² 1.00) | 0.59 (R² 1.00) |
+| `levenshtein` | n² | 1.47 (R² 0.99) | 1.71 (R² 1.00) | 1.72 (R² 0.96) | 0.79 (R² 0.50) |
+| `fft` | n log n | 1.06 (R² 0.99) | 1.09 (R² 1.00) | 1.05 (R² 0.97) | 0.90 (R² 1.00) |
+| `sort` | n log n | 1.04 (R² 1.00) | 1.05 (R² 1.00) | 1.05 (R² 1.00) | 0.84 (R² 0.99) |
+| `dijkstra` | n log n | 1.15 (R² 0.98) | 1.13 (R² 0.99) | 1.10 (R² 1.00) | 1.07 (R² 0.90) |
+| `crc32` | n | 0.97 (R² 1.00) | 0.95 (R² 1.00) | 0.75 (R² 0.96) | 0.96 (R² 1.00) |
+| `montecarlo` | n | 0.97 (R² 1.00) | 0.96 (R² 1.00) | 0.80 (R² 1.00) | 1.04 (R² 1.00) |
+| `sha256` | n | 0.85 (R² 0.98) | 0.77 (R² 0.98) | 0.77 (R² 0.85) | 0.13 (R² 0.89) |
+
+Java's exponents come out low — 0.13 on `sha256`, 0.59 on `nbody`, 1.46 on
+`matmul` — because bigger inputs give the JIT more iterations to amortize
+warm-up over, so measured time grows *slower* than the algorithm does. The
+fitted exponent is describing "JVM plus algorithm," not the algorithm. This
+is the one place a low exponent is a finding rather than an error.
+
+**Reporting R² is what makes that readable.** The Java `matmul` (0.58),
+`levenshtein` (0.50), and `mandelbrot_simd` (0.63) fits are visibly bad
+fits — a straight line through those points is the wrong model, and the
+number says so instead of quietly handing back a confident 1.46. `fib` is
+the clearest case: it's exponential, not polynomial, so its log-log slope
+(9.84 for C, 14.91 for Mojo) is meaningless as an exponent no matter how
+tidy the R² looks.
 
 ### Reporting tools
 
@@ -158,6 +336,8 @@ python3 runner/history.py --threshold 10       # flag regressions above 10% inst
 python3 runner/report.py                       # static HTML report from the latest run
 python3 runner/report.py results/foo.json -o out.html
 python3 runner/report.py --csv results.csv     # flat CSV instead of HTML, for spreadsheets/other tools
+python3 runner/report.py --sweep               # scaling charts from the latest results/sweep-*.json
+python3 runner/test_runner.py                  # plain-assert tests for verify/resultsio/scaling
 ```
 
 `history.py` groups by (benchmark, language) and shows a `%` change between
@@ -169,6 +349,14 @@ the effective threshold also rises with that run's own measurement noise
 it's flagged — a run that's "10% slower" on a benchmark with 8% run-to-run
 noise isn't a regression, it's the noise floor. Peak RSS has no per-repeat
 samples to derive noise from, so it always uses the flat `--threshold`.
+
+Every `--json` run also records an **environment fingerprint** (CPU model,
+`nproc`, kernel, CPU governor, load average, git SHA, and
+`gcc`/`rustc`/`javac`/`python3`/`mojo --version`). When two consecutive runs
+disagree on it, `history.py` prints `⚠ env changed: gcc 13.3.0 → 14.1.0` and
+**downgrades any regression across that boundary to a note** — a slowdown
+that coincides with a compiler upgrade isn't evidence of a code regression.
+Results files written before this existed load fine; they just report no env.
 
 `report.py` renders a per-benchmark summary table (min, median, mean ± stdev,
 throughput, peak RSS, speedup vs the fastest language — flagged `(noisy)` when
@@ -192,9 +380,13 @@ benchmarks/
     mojo/<name>.mojo
 runner/
   languages.py       per-language build/run commands + the benchmark registry
-  run.py             builds, times, self-checks, prints the table, writes JSON
-  history.py         trend view across results/*.json
-  report.py          static HTML chart view
+  run.py             builds, times, verifies, prints the table, writes JSON
+  verify.py          cross-language output comparison (exact / rel_tol / skip)
+  resultsio.py       loads results/*.json in both the current and legacy formats
+  scaling.py         log-log complexity fit + crossover brackets for --sweep
+  history.py         trend view across results/*.json, with env-change awareness
+  report.py          static HTML chart view (incl. --sweep scaling charts)
+  test_runner.py     plain-assert tests, no framework
 results/             --json output (gitignored)
 bin/                 compiled binaries/classes (gitignored)
 ```
@@ -220,7 +412,10 @@ existed only needed one line — adding its name to that same set.
   across compiled and interpreted languages, and it captures real startup
   cost (JVM warm-up, Python interpreter init) — but it does *not* isolate
   steady-state/JIT-warmed performance. Treat these numbers as "run this
-  program end to end," not a microarchitectural comparison.
+  program end to end," not a microarchitectural comparison. The `noop`
+  baseline (see [above](#wall-clock-vs-compute-separating-startup-cost))
+  lets you subtract startup out; what it can't subtract is JIT warm-up,
+  which is a property of the workload, not the launch.
 - **Peak memory** comes from `/usr/bin/time -v`'s "Maximum resident set
   size," captured alongside every timed run.
 - **`primes_parallel` has no Mojo entry** because current stable Mojo has no
@@ -236,10 +431,17 @@ existed only needed one line — adding its name to that same set.
   compiler flag: C uses `__attribute__((target("avx2")))`, Rust uses
   `#[target_feature(enable = "avx2")]` — both mean the rest of each
   language's benchmarks keep compiling for a generic target.
-- **`json_roundtrip` uses a fixed schema with no RNG anywhere**, so unlike
-  every other benchmark, all 5 languages print the exact same output number
-  for a given size — a bonus cross-language sanity check on top of each
-  language's own self-check.
+- **Every benchmark that needs randomness hand-rolls the same LCG.** This
+  used to be the suite's biggest correctness hole: `sort`, `bst`,
+  `graph_bfs`, `ipvalidate`, and `wordcount` each built their input from
+  their own language's RNG — libc `rand()`, `java.util.Random`, Python's
+  Mersenne Twister, Mojo's `random_si64` — so the five implementations were
+  provably sorting different arrays and walking different graphs, and no
+  amount of per-language self-checking could notice. They now all use the
+  same glibc-style LCG (`state = (state * 1103515245 + 12345) & 0x7fffffff`,
+  seeded to 42) that `montecarlo` already used, so all 5 languages consume
+  an identical input stream and print identical output. `json_roundtrip`
+  sidesteps the problem entirely with a fixed schema and no RNG at all.
 - **`lru_cache` and `dijkstra` extend `wordcount`'s hand-roll-only-where-
   necessary precedent** to a hashmap+linked-list and a hashmap+priority-queue
   respectively: C hand-rolls both (open addressing for the hashmap, an array-
@@ -268,11 +470,17 @@ existed only needed one line — adding its name to that same set.
   buffer with periodic mutation, so the hash-based match finder actually has
   something to find. Pure arithmetic "noise" wouldn't compress at all and
   would barely exercise the interesting code path.
-- **`fft` joins `mandelbrot`/`mandelbrot_gpu` as a benchmark whose printed
-  value isn't expected to match bit-for-bit across languages** — floating-
-  point associativity differs per language/compiler, so each language's
-  roundtrip reconstruction error converges to its own tiny value (~1e-10 to
-  1e-11 at the default size) rather than an identical one.
+- **The 4 benchmarks that can't match bit-for-bit are declared, not
+  assumed.** `fft`, `mandelbrot`, `mandelbrot_simd`, and `mandelbrot_gpu`
+  each carry an explicit `{"skip": "<reason>"}` verification policy with the
+  measured disagreement written down (see
+  [the table above](#the-4-benchmarks-that-skip-cross-language-verification)),
+  and are excluded from the leaderboard as a result. Everything else is held
+  to byte-identical output. Note this cuts the other way too: several
+  benchmarks that *look* like they should need a float tolerance —
+  `matmul`, `matmul_blocked`, `matmul_gpu`, `nbody`, `montecarlo` — turn out
+  to agree exactly once every language formats its output the same way, so
+  none of them uses one.
 - **`mandelbrot_gpu`, `matmul_gpu`, and `matmul_gpu_warm` reach the GPU five
   different ways.**
   Mojo compiles its own kernels via `max.gpu.host.DeviceContext` (no
